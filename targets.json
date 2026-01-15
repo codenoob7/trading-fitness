@@ -1,0 +1,32 @@
+{
+  "version": "1.0.0",
+  "targets": {
+    "ith-python": {
+      "path": "packages/ith-python",
+      "type": "python",
+      "dependencies": [],
+      "artifacts": ["artifacts/results.html", "artifacts/synth_ithes/"],
+      "testCommand": "uv run pytest",
+      "lintCommand": "uv run ruff check --fix"
+    },
+    "core-rust": {
+      "path": "packages/core-rust",
+      "type": "rust",
+      "dependencies": [],
+      "testCommand": "cargo test",
+      "lintCommand": "cargo clippy"
+    },
+    "core-bun": {
+      "path": "packages/core-bun",
+      "type": "bun",
+      "dependencies": [],
+      "testCommand": "bun test",
+      "lintCommand": "bun run lint"
+    },
+    "shared-types": {
+      "path": "packages/shared-types",
+      "type": "schema",
+      "dependencies": []
+    }
+  }
+}
