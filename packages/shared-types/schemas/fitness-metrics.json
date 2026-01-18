@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trading-fitness.local/schemas/fitness-metrics.json",
+  "title": "Fitness Metrics",
+  "description": "Trading strategy fitness metrics",
+  "type": "object",
+  "properties": {
+    "sharpe_ratio": {
+      "type": "number",
+      "description": "Annualized Sharpe ratio of returns"
+    },
+    "max_drawdown": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Maximum drawdown as a decimal (0.15 = 15%)"
+    },
+    "total_return": {
+      "type": "number",
+      "description": "Total return over the period as a decimal"
+    },
+    "annualized_return": {
+      "type": "number",
+      "description": "Annualized return as a decimal"
+    },
+    "volatility": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Annualized volatility of returns"
+    },
+    "calmar_ratio": {
+      "type": "number",
+      "description": "Calmar ratio (annualized return / max drawdown)"
+    },
+    "sortino_ratio": {
+      "type": "number",
+      "description": "Sortino ratio (return / downside deviation)"
+    },
+    "trading_days": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of trading days in the analysis period"
+    },
+    "market_type": {
+      "type": "string",
+      "enum": ["crypto", "stocks", "forex", "futures"],
+      "description": "Market type (affects trading days per year calculation)"
+    }
+  },
+  "required": ["sharpe_ratio", "max_drawdown", "total_return"]
+}

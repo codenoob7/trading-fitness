@@ -1,14 +1,12 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Core trading fitness calculations in Rust.
+//!
+//! This crate provides high-performance implementations of ITH (Investment Time Horizon)
+//! analysis and related fitness metrics.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod ith;
+pub mod metrics;
+pub mod types;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use ith::*;
+pub use metrics::*;
+pub use types::*;

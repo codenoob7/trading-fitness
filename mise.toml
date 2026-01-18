@@ -33,3 +33,19 @@ run = "bash scripts/affected.sh list"
 
 [tasks."test:affected"]
 run = "bash scripts/affected.sh test"
+
+[tasks.generate-types]
+description = "Generate types from JSON Schema"
+run = "bash scripts/generate-types.sh all"
+
+[tasks."generate-types:python"]
+description = "Generate Python types from JSON Schema"
+run = "bash scripts/generate-types.sh python"
+
+[tasks."generate-types:typescript"]
+description = "Generate TypeScript types from JSON Schema"
+run = "bash scripts/generate-types.sh typescript"
+
+[tasks."generate-types:rust"]
+description = "Generate Rust types from JSON Schema"
+run = "bash scripts/generate-types.sh rust"

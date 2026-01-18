@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trading-fitness.local/schemas/nav-record.json",
+  "title": "NAV Record",
+  "description": "Net Asset Value record for trading strategy analysis",
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of the NAV observation (ISO 8601 format)"
+    },
+    "nav": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Net Asset Value, typically starting at 1.0"
+    },
+    "pnl": {
+      "type": "number",
+      "description": "Profit and Loss for the period (calculated as NAV diff if not provided)"
+    }
+  },
+  "required": ["date", "nav"],
+  "additionalProperties": false
+}

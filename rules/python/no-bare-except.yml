@@ -1,0 +1,24 @@
+id: no-bare-except
+language: python
+message: Avoid bare except clauses - catch specific exceptions
+severity: warning
+rule:
+  kind: except_clause
+  has:
+    kind: block
+  not:
+    any:
+      - has:
+          kind: identifier
+      - has:
+          kind: as_pattern
+      - has:
+          kind: attribute
+      - has:
+          kind: tuple
+note: |
+  Bare except clauses catch all exceptions including KeyboardInterrupt
+  and SystemExit. Use specific exception types like:
+  - except ValueError:
+  - except (TypeError, ValueError):
+  - except Exception: (if you really need to catch all)

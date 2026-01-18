@@ -13,12 +13,12 @@
 
 ## Package Map
 
-| Package        | Language | Purpose                          |
-| -------------- | -------- | -------------------------------- |
-| `ith-python`   | Python   | ITH fitness analysis (PRIMARY)   |
-| `core-rust`    | Rust     | Future performance-critical code |
-| `core-bun`     | Bun/TS   | Future async I/O, APIs           |
-| `shared-types` | Multi    | Cross-language schemas           |
+| Package        | Language | Purpose                        | Tests |
+| -------------- | -------- | ------------------------------ | ----- |
+| `ith-python`   | Python   | ITH fitness analysis (PRIMARY) | 40    |
+| `core-rust`    | Rust     | Performance-critical compute   | 14    |
+| `core-bun`     | Bun/TS   | Async I/O, APIs, metrics       | 32    |
+| `shared-types` | Multi    | JSON Schema type definitions   | -     |
 
 ## Data Flow
 
@@ -33,10 +33,12 @@ data/nav_data_custom/*.csv  -->  [ith-python]  -->  artifacts/synth_ithes/
 
 ```
 trading-fitness/
+├── .claude/
+│   └── skills/              # Claude Code skill modules
 ├── packages/
 │   ├── ith-python/          # Primary Python analysis package
-│   ├── core-rust/           # Rust placeholder
-│   ├── core-bun/            # Bun/TS placeholder
+│   ├── core-rust/           # Rust performance-critical code
+│   ├── core-bun/            # Bun/TS async I/O, APIs
 │   └── shared-types/        # Cross-language schemas
 ├── services/                # Future deployable services
 ├── data/                    # Input data (TRACKED)
@@ -45,8 +47,8 @@ trading-fitness/
 │   └── synth_ithes/         # Analysis results
 ├── logs/                    # JSONL logs (GITIGNORED)
 ├── rules/                   # ast-grep rule directories
-├── docs/                    # Documentation
-└── skills/                  # Claude Code skill modules
+├── scripts/                 # Automation (benchmarks, code generation)
+└── docs/                    # Documentation
 ```
 
 ## ITH (Investment Time Horizon) Concept

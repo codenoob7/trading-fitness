@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trading-fitness.local/schemas/ith-result.json",
+  "title": "ITH Result",
+  "description": "Investment Time Horizon analysis result",
+  "type": "object",
+  "properties": {
+    "uid": {
+      "type": "string",
+      "description": "Unique identifier for this analysis run"
+    },
+    "source_file": {
+      "type": "string",
+      "description": "Original data file name"
+    },
+    "analysis_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the analysis was performed"
+    },
+    "date_range": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "string",
+          "format": "date"
+        },
+        "end": {
+          "type": "string",
+          "format": "date"
+        },
+        "trading_days": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": ["start", "end", "trading_days"]
+    },
+    "tmaeg": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Target Maximum Acceptable Excess Gain threshold used"
+    },
+    "tmaeg_method": {
+      "type": "string",
+      "enum": ["mdd", "fixed"],
+      "description": "Method used to determine TMAEG (max drawdown or fixed)"
+    },
+    "ith_epochs": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of ITH epochs identified"
+    },
+    "ith_intervals_cv": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Coefficient of variation of ITH interval lengths"
+    },
+    "qualified": {
+      "type": "boolean",
+      "description": "Whether the strategy meets fitness criteria"
+    },
+    "disqualification_reason": {
+      "type": "string",
+      "description": "Reason for disqualification if not qualified"
+    },
+    "metrics": {
+      "$ref": "fitness-metrics.json"
+    }
+  },
+  "required": ["uid", "analysis_timestamp", "date_range", "tmaeg", "ith_epochs", "qualified"]
+}

@@ -1,0 +1,18 @@
+id: no-unwrap-in-lib
+language: rust
+message: Avoid unwrap() in library code - use expect() or proper error handling
+severity: warning
+rule:
+  pattern: $EXPR.unwrap()
+note: |
+  unwrap() causes a panic with an unhelpful error message.
+  Use expect() with a descriptive message or proper error handling:
+
+  // Instead of:
+  value.unwrap()
+
+  // Use:
+  value.expect("description of why this should never fail")
+
+  // Or:
+  value?

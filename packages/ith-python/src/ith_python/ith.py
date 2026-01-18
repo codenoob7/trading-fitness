@@ -37,19 +37,47 @@ The script will automatically bypass strict thresholds for your custom data,
 ensuring your trading performance gets analyzed regardless of synthetic criteria.
 """
 
-from pathlib import Path
+# === All imports at top of file ===
+from __future__ import annotations
+
+import glob
+import json
+import os
+import shutil
 import sys
+import webbrowser
 from datetime import datetime
+from pathlib import Path
+from typing import NamedTuple
+
+import numpy as np
+import pandas as pd
+import plotly.graph_objs as go
 from loguru import logger
-from ith_python.paths import (
-    get_artifacts_dir,
-    get_log_dir,
-    get_custom_nav_dir,
-    get_synth_ithes_dir,
-    ensure_dirs,
-)
+from numba import njit
+from plotly.graph_objs.layout import XAxis, YAxis
+from plotly.subplots import make_subplots
 from rich.console import Console
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 from rich.traceback import install
+from scipy import stats
+from scipy.stats import gmean
+
+from ith_python.paths import (
+    ensure_dirs,
+    get_artifacts_dir,
+    get_custom_nav_dir,
+    get_log_dir,
+    get_synth_ithes_dir,
+)
+
+# === Module initialization ===
 
 # Install rich traceback for better error display
 install(show_locals=True)
@@ -76,7 +104,7 @@ logs_dir = get_log_dir()
 ensure_dirs()
 
 # Show user where data will be stored
-console.print(f"[bold cyan]Project directories initialized:[/bold cyan]")
+console.print("[bold cyan]Project directories initialized:[/bold cyan]")
 console.print(f"   Artifacts: {data_dir}")
 console.print(f"   Logs: {logs_dir}")
 
@@ -99,23 +127,8 @@ logger.add(
     retention="30 days",
     format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
 )
-# -------------------------------------------------------------------------------------------------------------------------------------------------------------------------#
-import pandas as pd
-import webbrowser, os, glob, subprocess, platform, json, shutil
-import numpy as np, pandas as pd, plotly.graph_objs as go
-from plotly.subplots import make_subplots
-from scipy import stats
-from scipy.stats import gmean
-from plotly.graph_objs.layout import XAxis, YAxis
-from typing import NamedTuple
-from numba import njit
-from rich.progress import (
-    Progress,
-    SpinnerColumn,
-    TimeElapsedColumn,
-    BarColumn,
-    TextColumn,
-)
+
+# === Configuration Classes ===
 
 
 class IthConfig(NamedTuple):
@@ -276,7 +289,6 @@ def process_csv_batch(
     data_source: str = "Synthetic",
 ) -> tuple[int, int, int]:
     """Process a batch of CSV files with consistent logic."""
-    total_files = len(csv_files)
     processed_files = 0
     disqualified_files = 0
     qualified_results = config.qualified_results
@@ -379,9 +391,6 @@ def load_config(filename="config.json"):
     with open(filename, "r") as file:
         config = json.load(file)
     return config
-
-
-from typing import NamedTuple
 
 
 def generate_synthetic_nav(params: SyntheticNavParams):
@@ -1230,7 +1239,7 @@ if existing_csv_files:
     )
 
 # Generate new NAV data if necessary
-console.print(f"🔄 [bold yellow]Starting synthetic data generation...[/bold yellow]")
+console.print("🔄 [bold yellow]Starting synthetic data generation...[/bold yellow]")
 with create_progress_bar(console) as progress:
     task = progress.add_task(
         "Generating synthetic data...",
@@ -1343,7 +1352,7 @@ custom_csv_folder = get_custom_nav_dir()
 console.print(f"📁 [bold cyan]Custom CSV folder ready:[/bold cyan] {custom_csv_folder}")
 if not any(custom_csv_folder.glob("*.csv")):
     console.print(
-        f"💡 [yellow]Tip:[/yellow] Place your trading CSV files (with Date, NAV columns) in the folder above to analyze your own performance data!"
+        "💡 [yellow]Tip:[/yellow] Place your trading CSV files (with Date, NAV columns) in the folder above to analyze your own performance data!"
     )
 
 start_date, end_date = get_date_range_from_csvs(custom_csv_folder)
@@ -1375,7 +1384,7 @@ if custom_csvs:
     )
 else:
     console.print(
-        f"📂 [dim]No custom CSV files to process - continuing with synthetic data generation[/dim]"
+        "📂 [dim]No custom CSV files to process - continuing with synthetic data generation[/dim]"
     )
 
 # The rest of the synthetic data generation code remains the same

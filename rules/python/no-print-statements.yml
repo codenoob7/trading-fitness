@@ -1,0 +1,12 @@
+id: no-print-statements
+language: python
+message: Use logging instead of print statements
+severity: hint
+rule:
+  pattern: print($$$ARGS)
+note: |
+  Print statements are not suitable for production code.
+  Use the logging module or loguru for proper logging:
+
+  from loguru import logger
+  logger.info("message")

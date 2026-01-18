@@ -1,22 +1,44 @@
 # core-bun
 
-Bun/TypeScript package placeholder for future async I/O and API components.
+High-performance trading fitness calculations in TypeScript/Bun.
 
 ## Status
 
-Initialized with basic dependencies. Ready for implementation when needed.
+Implemented with ITH analysis and metrics calculations.
+
+## Modules
+
+| Module    | Purpose                             |
+| --------- | ----------------------------------- |
+| `ith`     | ITH epoch detection and analysis    |
+| `metrics` | Sharpe ratio, max drawdown, returns |
+| `types`   | Zod schemas matching shared-types   |
+
+## Key Functions
+
+```typescript
+// ITH analysis
+excessGainExcessLoss(nav: number[], hurdle: number): ExcessGainLossResult
+determineTmaeg(nav: number[], method: string, fixedValue: number): number
+
+// Metrics
+sharpeRatio(returns: number[], periodsPerYear: number, riskFreeRate?: number): number
+maxDrawdown(navValues: number[]): number
+totalReturn(navValues: number[]): number
+pnlFromNav(navValues: number[]): number[]
+calculateFitnessMetrics(navValues: number[], periodsPerYear: number): FitnessMetrics
+```
 
 ## Dependencies
 
-- pino (logging)
 - zod (schema validation)
 - @biomejs/biome (dev: linting/formatting)
 
 ## Quick Start
 
 ```bash
-bun run index.ts   # Run entry point
-bun test           # Run tests
+bun run src/index.ts   # Run entry point
+bun test               # Run tests (32 tests)
 ```
 
 ---
