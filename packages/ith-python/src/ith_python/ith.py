@@ -386,31 +386,44 @@ logger.debug(f"{existing_csv_files=}")
 
 
 def generate_synthetic_nav(params: SyntheticNavParams):
+    """Generate synthetic NAV data with bull market characteristics.
+
+    Uses MULTIPLICATIVE returns (cumprod) to guarantee NAV stays positive.
+    This is symmetric with the bear generator which also uses cumprod.
+    """
     dates = pd.date_range(params.start_date, params.end_date)
-    walk = stats.t.rvs(
+
+    # Generate daily returns using t-distribution
+    daily_returns = stats.t.rvs(
         params.df,
         loc=params.avg_daily_return,
         scale=params.daily_return_volatility,
         size=len(dates),
     )
-    walk = np.cumsum(walk)
+
+    # Add drawdowns (dips in bull market)
     drawdown = False
     for i in range(len(dates)):
         if drawdown:
-            walk[i] -= np.random.uniform(
+            # Drawdown subtracts from returns (price goes down temporarily)
+            daily_returns[i] -= np.random.uniform(
                 params.drawdown_magnitude_low, params.drawdown_magnitude_high
             )
             if np.random.rand() < params.drawdown_recovery_prob:
                 drawdown = False
         elif np.random.rand() < params.drawdown_prob:
             drawdown = True
-    walk = walk - walk[0] + 1  # Normalize the series so that it starts with 1
+
+    # Use MULTIPLICATIVE returns: NAV = cumprod(1 + returns)
+    # This guarantees NAV stays positive (unlike additive cumsum)
+    # Clamp returns to prevent NAV going negative (returns > -100%)
+    daily_returns = np.clip(daily_returns, -0.99, None)
+    walk = np.cumprod(1 + daily_returns)
+
     nav = pd.DataFrame(data=walk, index=dates, columns=["NAV"])
     nav.index.name = "Date"
     nav["PnL"] = nav["NAV"].diff()
-    nav["PnL"] = nav["PnL"].fillna(
-        nav["NAV"].iloc[0] - 1
-    )  # Adjust the first PnL value accordingly
+    nav["PnL"] = nav["PnL"].fillna(nav["NAV"].iloc[0] - 1)
     return nav
 
 
@@ -963,8 +976,9 @@ def process_nav_data(
         if bypass_thresholds or (aggcv_low_bound < aggcv < aggcv_up_bound):
             if bypass_thresholds:
                 source_name = Path(nav_dir).stem if nav_dir else "unknown"
+                # Symmetric with bear_ith.py which uses "bear_nav_"
                 filename = (
-                    f"nav_ming_xu_"
+                    f"bull_nav_"
                     f"EL_{el_cv:.5f}_"
                     f"BullCV_{bull_cv:.5f}_"
                     f"TMAEG_{TMAEG:.5f}_"

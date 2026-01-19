@@ -146,8 +146,8 @@ class BearSyntheticNavParams(NamedTuple):
     daily_return_volatility: float = 0.008
     # Same df as bull (5) for symmetric distribution
     df: int = 5
-    # Less frequent rallies (dead cat bounces)
-    rally_prob: float = 0.02
+    # Same probability as bull's drawdown_prob for symmetric behavior
+    rally_prob: float = 0.05
     rally_magnitude_low: float = 0.001
     rally_magnitude_high: float = 0.003
     rally_recovery_prob: float = 0.05
@@ -363,10 +363,16 @@ class MaxRunupResult(NamedTuple):
 
 
 def max_runup(nav_values) -> MaxRunupResult:
-    """Calculate maximum runup (adverse for shorts)."""
+    """Calculate maximum runup (adverse for shorts).
+
+    Uses bounded formula: runup = 1 - (running_min / nav)
+    This is symmetric with max_drawdown: drawdown = 1 - (nav / running_max)
+    Both formulas are bounded [0, 1).
+    """
     running_min = np.minimum.accumulate(nav_values)
-    runups = (nav_values / running_min) - 1
-    return MaxRunupResult(max_runup=np.max(runups))
+    # Bounded formula: runups in [0, 1) - symmetric with max_drawdown
+    runups = 1 - running_min / nav_values
+    return MaxRunupResult(max_runup=float(np.max(runups)))
 
 
 class PnLResult(NamedTuple):

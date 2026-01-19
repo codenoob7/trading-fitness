@@ -68,15 +68,22 @@ def _bull_excess_gain_excess_loss_numba(nav, hurdle):
         equity = nav[i - 1]
         next_equity = nav[i]
 
+        # Track new HIGHS (favorable for longs)
         if next_equity > candidate_crest:
-            if endorsing_crest != 0:
+            if endorsing_crest != 0 and next_equity != 0:
+                # Excess gain = profit from price rally
                 excess_gain = next_equity / endorsing_crest - 1
             else:
                 excess_gain = 0.0
             candidate_crest = next_equity
 
+        # Track new LOWS (drawdown = adverse for longs)
         if next_equity < candidate_nadir:
-            excess_loss = 1 - next_equity / endorsing_crest
+            # Excess loss = drawdown hurts longs
+            if endorsing_crest != 0:
+                excess_loss = 1 - next_equity / endorsing_crest
+            else:
+                excess_loss = 0.0
             candidate_nadir = next_equity
 
         reset_condition = (

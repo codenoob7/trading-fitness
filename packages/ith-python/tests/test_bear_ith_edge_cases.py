@@ -213,3 +213,102 @@ def test_constant_nav():
 
     assert long_result.num_of_bull_epochs == 0
     assert short_result.num_of_bear_epochs == 0
+
+
+# ============================================================
+# Max Drawdown / Max Runup Symmetry Tests
+# ============================================================
+
+
+class TestMaxDrawdownMaxRunupSymmetry:
+    """Tests for symmetric max_drawdown and max_runup calculations."""
+
+    def test_max_drawdown_uptrend(self):
+        """Pure uptrend should have zero drawdown."""
+        from ith_python.bull_ith_numba import max_drawdown
+
+        nav = np.array([1.0, 1.1, 1.2, 1.3, 1.4, 1.5])
+        result = max_drawdown(nav)
+        assert result == 0.0, f"Expected 0.0, got {result}"
+
+    def test_max_drawdown_downtrend(self):
+        """Downtrend should have positive drawdown."""
+        from ith_python.bull_ith_numba import max_drawdown
+
+        nav = np.array([1.0, 0.9, 0.8, 0.7])
+        result = max_drawdown(nav)
+        expected = 0.3  # 30% drawdown from 1.0 to 0.7
+        assert abs(result - expected) < 0.01, f"Expected {expected}, got {result}"
+
+    def test_max_runup_downtrend(self):
+        """Pure downtrend should have zero runup."""
+        from ith_python.bear_ith_numba import max_runup
+
+        nav = np.array([1.5, 1.4, 1.3, 1.2, 1.1, 1.0])
+        result = max_runup(nav)
+        assert result == 0.0, f"Expected 0.0, got {result}"
+
+    def test_max_runup_uptrend(self):
+        """Uptrend should have positive runup (adverse for shorts)."""
+        from ith_python.bear_ith_numba import max_runup
+
+        nav = np.array([0.7, 0.8, 0.9, 1.0])
+        result = max_runup(nav)
+        # Runup = 1 - (running_min / nav) = 1 - (0.7 / 1.0) = 0.3
+        expected = 0.3
+        assert abs(result - expected) < 0.01, f"Expected {expected}, got {result}"
+
+    def test_max_drawdown_bounded(self):
+        """Max drawdown should be bounded [0, 1)."""
+        from ith_python.bull_ith_numba import max_drawdown
+
+        # Even extreme drawdown should stay < 1.0
+        nav = np.array([1.0, 0.1, 0.01])
+        result = max_drawdown(nav)
+        assert 0 <= result < 1.0, f"Drawdown should be in [0, 1), got {result}"
+
+    def test_max_runup_bounded(self):
+        """Max runup should be bounded [0, 1) with new symmetric formula."""
+        from ith_python.bear_ith_numba import max_runup
+
+        # Even extreme runup should stay < 1.0 with bounded formula
+        nav = np.array([0.01, 0.1, 1.0])
+        result = max_runup(nav)
+        assert 0 <= result < 1.0, f"Runup should be in [0, 1), got {result}"
+
+    def test_drawdown_runup_symmetric_magnitude(self):
+        """For symmetric price movements, drawdown and runup should be equal."""
+        from ith_python.bull_ith_numba import max_drawdown
+        from ith_python.bear_ith_numba import max_runup
+
+        # Upward movement: 100 -> 120 (20% runup)
+        nav_up = np.array([100.0, 120.0])
+        runup = max_runup(nav_up)
+
+        # Downward movement: 120 -> 100 (matches runup direction)
+        nav_down = np.array([120.0, 100.0])
+        drawdown = max_drawdown(nav_down)
+
+        # Both should give approximately 0.167 (1 - 100/120)
+        expected = 1 - 100 / 120
+        assert abs(runup - expected) < 0.01, f"Runup expected {expected}, got {runup}"
+        assert abs(drawdown - expected) < 0.01, f"Drawdown expected {expected}, got {drawdown}"
+
+    def test_max_drawdown_recovery_preserves_max(self):
+        """Recovery after drawdown should not affect max drawdown."""
+        from ith_python.bull_ith_numba import max_drawdown
+
+        nav = np.array([1.0, 1.1, 0.9, 1.2])  # Dips then recovers
+        result = max_drawdown(nav)
+        expected = 1 - 0.9 / 1.1  # Max from peak 1.1 to trough 0.9
+        assert abs(result - expected) < 0.01, f"Expected {expected}, got {result}"
+
+    def test_max_runup_decline_preserves_max(self):
+        """Decline after runup should not affect max runup."""
+        from ith_python.bear_ith_numba import max_runup
+
+        nav = np.array([1.0, 0.9, 1.1, 0.8])  # Rallies then declines
+        result = max_runup(nav)
+        # Max runup from trough 0.9 to peak 1.1: 1 - 0.9/1.1
+        expected = 1 - 0.9 / 1.1
+        assert abs(result - expected) < 0.01, f"Expected {expected}, got {result}"

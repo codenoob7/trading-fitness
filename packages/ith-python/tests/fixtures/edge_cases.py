@@ -282,14 +282,18 @@ CASE_9_SYMMETRY_BASE = {
 }
 
 # Inverted version: Mirror around midpoint (107.5)
+# Inverted NAV = [115, 110, 112, 107, 109, 103, 105, 100]
+# This is a downtrend with relief rallies - symmetric to base uptrend
 CASE_9_SYMMETRY_INVERTED = {
     "name": "symmetry_inverted",
     "description": "Inverted NAV - long/short epochs should swap",
     "nav": 215 - CASE_9_SYMMETRY_BASE["nav"],  # Mirror around 107.5
     "tmaeg": 0.05,
     "tmaer": 0.05,
-    "expected_bull_epochs": [],  # Should match short epochs of base
-    "expected_bear_epochs": [],  # Should match long epochs of base
+    # Symmetry: base had bear_epochs=[], so inverted has bull_epochs=[]
+    "expected_bull_epochs": [],
+    # Symmetry: base had bull_epochs=[1, 5], so inverted has bear_epochs=[1, 5]
+    "expected_bear_epochs": [1, 5],
 }
 
 # ============================================================
