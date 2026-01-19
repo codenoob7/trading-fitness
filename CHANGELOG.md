@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/terrylica/trading-fitness/compare/v1.0.5...v1.1.0) (2026-01-19)
+
+
+### Features
+
+* **ith:** time-agnostic ITH refactoring for universal applicability ([33d918a](https://github.com/terrylica/trading-fitness/commit/33d918a6cf1b248216b513a6a31b66bdfcc7ad18))
+
 ## [1.0.5](https://github.com/terrylica/trading-fitness/compare/v1.0.4...v1.0.5) (2026-01-19)
 
 
