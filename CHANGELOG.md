@@ -1,3 +1,10 @@
+## [1.0.5](https://github.com/terrylica/trading-fitness/compare/v1.0.4...v1.0.5) (2026-01-19)
+
+
+### Bug Fixes
+
+* **mise:** run analyze:bull and analyze:bear sequentially ([306c36c](https://github.com/terrylica/trading-fitness/commit/306c36c7543a42b4b45520d08efae3f0ebe7e978))
+
 ## [1.0.4](https://github.com/terrylica/trading-fitness/compare/v1.0.3...v1.0.4) (2026-01-19)
 
 
