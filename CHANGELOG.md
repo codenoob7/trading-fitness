@@ -1,3 +1,11 @@
+## [1.0.1](https://github.com/terrylica/trading-fitness/compare/v1.0.0...v1.0.1) (2026-01-19)
+
+
+### Bug Fixes
+
+* **ith:** enforce bull/bear algorithm symmetry ([d46d64f](https://github.com/terrylica/trading-fitness/commit/d46d64f43a6ca31651504f5233e9b5682d45bc7a))
+* **release:** remove duplicate preflight dependency from version task ([a9c600b](https://github.com/terrylica/trading-fitness/commit/a9c600b018b956ce097edbe38e6b1e63ab508045))
+
 # 1.0.0 (2026-01-19)
 
 
