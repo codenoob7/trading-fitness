@@ -120,11 +120,163 @@ trading-fitness/
 - [ITH Methodology](docs/ITH.md) — Investment Time Horizon explained
 - [Logging Contract](docs/LOGGING.md) — NDJSON structured logging
 
-## Key Concepts
+## ITH Algorithm Specification
 
-- **TMAEG** (Target Maximum Acceptable Excess Gain): Drawdown-based threshold for ITH epochs
-- **ITH Epochs**: Periods where strategy exceeds the TMAEG threshold
-- **ITH Intervals CV**: Coefficient of variation measuring epoch consistency
+### Core Concepts
+
+ITH (Investment Time Horizon) analysis evaluates strategy fitness for both **long** (bull) and **short** (bear) positions using mathematically symmetric algorithms.
+
+| Concept                | Bull (Long)                                   | Bear (Short)                                   |
+| ---------------------- | --------------------------------------------- | ---------------------------------------------- |
+| **Threshold**          | TMAEG (Target Maximum Acceptable Excess Gain) | TMAER (Target Maximum Acceptable Excess Runup) |
+| **Adverse Movement**   | Drawdown (price ↓)                            | Runup (price ↑)                                |
+| **Favorable Movement** | Rally (price ↑)                               | Decline (price ↓)                              |
+| **Reference Point**    | `endorsing_crest` (confirmed peak)            | `endorsing_trough` (confirmed valley)          |
+| **Default Hurdle**     | 0.05 (5%) or `max_drawdown(nav)`              | 0.05 (5%) or `max_runup(nav)`                  |
+
+### Mathematical Formulas
+
+#### Drawdown and Runup (Bounded \[0, 1))
+
+```
+Bull Max Drawdown:  max_dd  = max(1 - nav / cummax(nav))     # Loss from peak
+Bear Max Runup:     max_ru  = max(1 - cummin(nav) / nav)     # Gain from trough (adverse for shorts)
+```
+
+#### Excess Gain/Loss Calculations
+
+```
+Bull Excess Gain:   excess_gain  = nav[i] / endorsing_crest - 1      # Unbounded [0, ∞)
+Bull Excess Loss:   excess_loss  = 1 - nav[i] / endorsing_crest      # Bounded [0, 1)
+
+Bear Excess Gain:   excess_gain  = endorsing_trough / nav[i] - 1     # Unbounded [0, ∞)
+Bear Excess Loss:   excess_loss  = 1 - endorsing_trough / nav[i]     # Bounded [0, 1)
+```
+
+#### Epoch Detection Condition
+
+```
+epoch[i] = (excess_gains[i] > excess_losses[i]) AND (excess_gains[i] > hurdle)
+```
+
+### Algorithm Pseudocode
+
+```python
+# Bull ITH Algorithm (bear inverts crest↔trough, max↔min, >↔<)
+# Reference: bull_ith_numba.py:36-143
+
+def bull_excess_gain_excess_loss(nav: array, hurdle: float) -> Result:
+    n = len(nav)
+    excess_gains = zeros(n)
+    excess_losses = zeros(n)
+    bull_epochs = zeros(n, bool)
+
+    # State variables
+    endorsing_crest = nav[0]      # Confirmed HIGH we measure FROM
+    endorsing_nadir = nav[0]      # Confirmed LOW after last crest
+    candidate_crest = nav[0]      # Potential new HIGH (favorable)
+    candidate_nadir = nav[0]      # Potential new LOW (adverse drawdown)
+    excess_gain = 0.0
+    excess_loss = 0.0
+
+    for i in range(1, n):
+        equity = nav[i]
+
+        # Track new HIGH (favorable for longs)
+        if equity > candidate_crest:
+            excess_gain = equity / endorsing_crest - 1
+            candidate_crest = equity
+
+        # Track new LOW (adverse drawdown)
+        if equity < candidate_nadir:
+            excess_loss = 1 - equity / endorsing_crest
+            candidate_nadir = equity
+
+        # Reset condition: lock in new reference when profitable
+        if (excess_gain > abs(excess_loss) AND
+            excess_gain > hurdle AND
+            candidate_crest >= endorsing_crest):
+
+            endorsing_crest = candidate_crest
+            endorsing_nadir = equity
+            candidate_nadir = equity
+            excess_gain = 0.0
+            excess_loss = 0.0
+
+        excess_gains[i] = excess_gain
+        excess_losses[i] = excess_loss
+
+        # Epoch detection
+        bull_epochs[i] = (excess_gains[i] > excess_losses[i] AND
+                         excess_gains[i] > hurdle)
+
+    # Calculate interval CV (consistency metric)
+    epoch_indices = where(bull_epochs)
+    intervals = diff(epoch_indices)
+    intervals_cv = std(intervals) / mean(intervals) if len(intervals) > 0 else NaN
+
+    return Result(excess_gains, excess_losses, count(bull_epochs),
+                  bull_epochs, intervals_cv)
+```
+
+### Variable Name Mapping
+
+| Variable            | Type            | Bull Meaning                     | Bear Meaning                      |
+| ------------------- | --------------- | -------------------------------- | --------------------------------- |
+| `hurdle`            | `float`         | TMAEG threshold                  | TMAER threshold                   |
+| `endorsing_crest`   | `float`         | Confirmed peak (HIGH)            | —                                 |
+| `endorsing_trough`  | `float`         | —                                | Confirmed valley (LOW)            |
+| `candidate_crest`   | `float`         | Potential new high               | —                                 |
+| `candidate_trough`  | `float`         | —                                | Potential new low                 |
+| `candidate_nadir`   | `float`         | Potential drawdown low           | —                                 |
+| `candidate_peak`    | `float`         | —                                | Potential runup high              |
+| `excess_gains`      | `ndarray`       | Per-point gains from rallies     | Per-point gains from declines     |
+| `excess_losses`     | `ndarray`       | Per-point losses from drawdowns  | Per-point losses from runups      |
+| `bull_epochs`       | `ndarray[bool]` | Points where long exceeds hurdle | —                                 |
+| `bear_epochs`       | `ndarray[bool]` | —                                | Points where short exceeds hurdle |
+| `bull_intervals_cv` | `float`         | CV of epoch spacing (long)       | —                                 |
+| `bear_intervals_cv` | `float`         | —                                | CV of epoch spacing (short)       |
+
+### Result Structure
+
+```python
+class BullExcessGainLossResult(NamedTuple):
+    excess_gains: ndarray       # Gains at each point
+    excess_losses: ndarray      # Losses at each point
+    num_of_bull_epochs: int     # Total epoch count
+    bull_epochs: ndarray[bool]  # Boolean mask of epochs
+    bull_intervals_cv: float    # Coefficient of variation
+
+class BearExcessGainLossResult(NamedTuple):
+    excess_gains: ndarray       # Gains at each point (from declines)
+    excess_losses: ndarray      # Losses at each point (from runups)
+    num_of_bear_epochs: int     # Total epoch count
+    bear_epochs: ndarray[bool]  # Boolean mask of epochs
+    bear_intervals_cv: float    # Coefficient of variation
+```
+
+### Fitness Qualification Criteria
+
+| Metric               | Bull Bounds          | Bear Bounds          | Purpose                 |
+| -------------------- | -------------------- | -------------------- | ----------------------- |
+| Sharpe Ratio         | 0.5 < SR < 9.9       | -9.9 < SR < -0.5     | Risk-adjusted returns   |
+| Epoch Count          | > `ceil(days/168)`   | > `ceil(days/168)`   | Minimum opportunities   |
+| Aggregate CV         | 0.0 < CV < 0.70      | 0.0 < CV < 0.70      | Epoch consistency       |
+| D2BE (Days to Epoch) | `days / epoch_count` | `days / epoch_count` | Average epoch frequency |
+
+### Symmetry Proof
+
+The Bull and Bear algorithms are **exact mathematical inverses**:
+
+```
+Bull: tracks HIGHS, gains from UP,   losses from DOWN
+Bear: tracks LOWS,  gains from DOWN, losses from UP
+
+Bull excess_gain  = nav / crest - 1     ←→  Bear excess_gain  = trough / nav - 1
+Bull excess_loss  = 1 - nav / crest     ←→  Bear excess_loss  = 1 - trough / nav
+Bull running_max  = cummax(nav)         ←→  Bear running_min  = cummin(nav)
+Bull new_high     = nav > candidate     ←→  Bear new_low      = nav < candidate
+```
 
 ## License
 

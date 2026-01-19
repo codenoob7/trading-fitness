@@ -795,7 +795,8 @@ def process_nav_data(
                 plot_bgcolor=plot_config.plot_bgcolor,
                 legend=dict(
                     x=0.01,
-                    y=0.98,
+                    y=0.55,  # Left-center of upper subplot
+                    yanchor="middle",
                     traceorder="normal",
                     font=dict(
                         family=plot_config.legend_font_family,
