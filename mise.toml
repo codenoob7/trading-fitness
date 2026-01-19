@@ -24,8 +24,8 @@ description = "Test all packages"
 run = "cd packages/ith-python && uv run pytest"
 
 [tasks.analyze]
-description = "Run ITH analysis (bull + bear)"
-depends = ["analyze:bull", "analyze:bear"]
+description = "Run ITH analysis (bull then bear, sequentially)"
+depends = ["analyze:bear"]  # bear depends on bull, so runs bull->bear
 
 [tasks."analyze:bull"]
 description = "Run Bull (long) ITH analysis"
@@ -33,6 +33,7 @@ run = "cd packages/ith-python && uv run python -m ith_python.ith"
 
 [tasks."analyze:bear"]
 description = "Run Bear (short) ITH analysis"
+depends = ["analyze:bull"]  # Run after bull completes
 run = "cd packages/ith-python && uv run python -m ith_python.bear_ith"
 
 [tasks.affected]
