@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "ITH (Investment Time Horizon) fitness analysis"
 requires-python = ">=3.12"
 dependencies = [
+    "kaleido>=1.2.0",
     "loguru>=0.7.3",
     "numba>=0.63.1",
     "numpy>=2.3.5",

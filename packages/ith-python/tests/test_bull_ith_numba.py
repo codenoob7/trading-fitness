@@ -1,80 +1,80 @@
-"""Tests for numba-accelerated ITH calculations."""
+"""Tests for numba-accelerated Bull ITH calculations."""
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from ith_python.ith_numba import (
-    ExcessGainLossResult,
-    _excess_gain_excess_loss_numba_original,
+from ith_python.bull_ith_numba import (
+    BullExcessGainLossResult,
+    bull_excess_gain_excess_loss,
     generate_synthetic_nav,
 )
 
 
-class TestExcessGainLossResult:
-    """Tests for ExcessGainLossResult NamedTuple."""
+class TestBullExcessGainLossResult:
+    """Tests for BullExcessGainLossResult NamedTuple."""
 
     def test_result_has_expected_fields(self):
-        """ExcessGainLossResult should have all expected fields."""
-        result = ExcessGainLossResult(
+        """BullExcessGainLossResult should have all expected fields."""
+        result = BullExcessGainLossResult(
             excess_gains=np.array([0.0, 0.1]),
             excess_losses=np.array([0.0, 0.05]),
-            num_of_ith_epochs=1,
-            ith_epochs=np.array([False, True]),
-            ith_intervals_cv=0.5,
+            num_of_bull_epochs=1,
+            bull_epochs=np.array([False, True]),
+            bull_intervals_cv=0.5,
         )
 
         assert hasattr(result, "excess_gains")
         assert hasattr(result, "excess_losses")
-        assert hasattr(result, "num_of_ith_epochs")
-        assert hasattr(result, "ith_epochs")
-        assert hasattr(result, "ith_intervals_cv")
+        assert hasattr(result, "num_of_bull_epochs")
+        assert hasattr(result, "bull_epochs")
+        assert hasattr(result, "bull_intervals_cv")
 
 
-class TestExcessGainExcessLoss:
-    """Tests for the core excess gain/loss calculation."""
+class TestBullExcessGainExcessLoss:
+    """Tests for the core bull excess gain/loss calculation."""
 
     def test_basic_calculation(self, sample_nav_array: np.ndarray):
         """Basic test that the function runs and returns expected types."""
         hurdle = 0.05
-        result = _excess_gain_excess_loss_numba_original(sample_nav_array, hurdle)
+        result = bull_excess_gain_excess_loss(sample_nav_array, hurdle)
 
-        assert isinstance(result, ExcessGainLossResult)
+        assert isinstance(result, BullExcessGainLossResult)
         assert len(result.excess_gains) == len(sample_nav_array)
         assert len(result.excess_losses) == len(sample_nav_array)
-        assert len(result.ith_epochs) == len(sample_nav_array)
-        assert isinstance(result.num_of_ith_epochs, (int, np.integer))
+        assert len(result.bull_epochs) == len(sample_nav_array)
+        assert isinstance(result.num_of_bull_epochs, (int, np.integer))
 
     def test_flat_nav_no_epochs(self):
-        """Flat NAV should produce zero ITH epochs."""
+        """Flat NAV should produce zero bull epochs."""
         flat_nav = np.ones(100)
         hurdle = 0.05
-        result = _excess_gain_excess_loss_numba_original(flat_nav, hurdle)
+        result = bull_excess_gain_excess_loss(flat_nav, hurdle)
 
-        assert result.num_of_ith_epochs == 0
+        assert result.num_of_bull_epochs == 0
 
     def test_strong_uptrend_produces_epochs(self):
-        """Strong uptrend should produce ITH epochs."""
+        """Strong uptrend should produce bull epochs."""
         # Create strong upward trend
         nav = np.cumprod(1 + np.ones(100) * 0.02)  # 2% daily gains
         hurdle = 0.05
-        result = _excess_gain_excess_loss_numba_original(nav, hurdle)
+        result = bull_excess_gain_excess_loss(nav, hurdle)
 
-        assert result.num_of_ith_epochs > 0
+        assert result.num_of_bull_epochs > 0
 
     def test_excess_gains_non_negative(self, sample_nav_array: np.ndarray):
         """Excess gains should be non-negative."""
         hurdle = 0.05
-        result = _excess_gain_excess_loss_numba_original(sample_nav_array, hurdle)
+        result = bull_excess_gain_excess_loss(sample_nav_array, hurdle)
 
         assert np.all(result.excess_gains >= 0)
 
     def test_different_hurdles(self, sample_nav_array: np.ndarray):
-        """Higher hurdle should produce fewer or equal ITH epochs."""
-        result_low = _excess_gain_excess_loss_numba_original(sample_nav_array, 0.01)
-        result_high = _excess_gain_excess_loss_numba_original(sample_nav_array, 0.10)
+        """Higher hurdle should produce fewer or equal bull epochs."""
+        result_low = bull_excess_gain_excess_loss(sample_nav_array, 0.01)
+        result_high = bull_excess_gain_excess_loss(sample_nav_array, 0.10)
 
-        assert result_high.num_of_ith_epochs <= result_low.num_of_ith_epochs
+        assert result_high.num_of_bull_epochs <= result_low.num_of_bull_epochs
 
 
 class TestGenerateSyntheticNav:

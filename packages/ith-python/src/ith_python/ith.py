@@ -74,7 +74,7 @@ from ith_python.paths import (
     get_artifacts_dir,
     get_custom_nav_dir,
     get_log_dir,
-    get_synth_ithes_dir,
+    get_synth_bull_ithes_dir,
 )
 
 # === Module initialization ===
@@ -131,21 +131,26 @@ logger.add(
 # === Configuration Classes ===
 
 
-class IthConfig(NamedTuple):
+class BullIthConfig(NamedTuple):
+    """Configuration for Bull ITH (Long Position) analysis."""
     delete_everything: bool = False
-    output_dir: Path = get_synth_ithes_dir()
+    output_dir: Path = get_synth_bull_ithes_dir()
     TMAEG_dynamically_determined_by: str = "mdd"
     TMAEG: float = 0.05
     date_initiate: str = "2020-01-30"
     date_conclude: str = "2023-07-25"
-    ith_epochs_lower_bound: int = 10
-    ith_epochs_upper_bound: int = 100000
+    bull_epochs_lower_bound: int = 10
+    bull_epochs_upper_bound: int = 100000
     sr_lower_bound: float = 0.5
     sr_upper_bound: float = 9.9
     aggcv_low_bound: float = 0
     aggcv_up_bound: float = 0.70
     qualified_results: int = 0
     required_qualified_results: int = 15
+
+
+# Backwards compatibility alias
+IthConfig = BullIthConfig
 
 
 class SyntheticNavParams(NamedTuple):
@@ -366,9 +371,9 @@ output_dir, nav_dir = setup_directories(config)
 date_duration = (
     pd.to_datetime(config.date_conclude) - pd.to_datetime(config.date_initiate)
 ).days
-ith_epochs_lower_bound = int(np.floor(date_duration / 28 / 6))
-logger.debug(f"{ith_epochs_lower_bound=}")
-ith_epochs_upper_bound = config.ith_epochs_upper_bound
+bull_epochs_lower_bound = int(np.floor(date_duration / 28 / 6))
+logger.debug(f"{bull_epochs_lower_bound=}")
+bull_epochs_upper_bound = config.bull_epochs_upper_bound
 sr_lower_bound = config.sr_lower_bound
 sr_upper_bound = config.sr_upper_bound
 aggcv_low_bound = config.aggcv_low_bound
@@ -594,22 +599,28 @@ def geometric_mean_of_drawdown(nav_values) -> GeometricMeanDrawdownResult:
     return GeometricMeanDrawdownResult(geometric_mean=geometric_mean)
 
 
-class ExcessGainLossResult(NamedTuple):
+class BullExcessGainLossResult(NamedTuple):
+    """Result of bull excess gain/loss calculation for LONG positions."""
     excess_gains: np.ndarray
     excess_losses: np.ndarray
-    num_of_ith_epochs: int
-    ith_epochs: np.ndarray
-    ith_intervals_cv: float
+    num_of_bull_epochs: int
+    bull_epochs: np.ndarray
+    bull_intervals_cv: float
+
+
+# Backwards compatibility alias
+ExcessGainLossResult = BullExcessGainLossResult
 
 
 @njit
-def _excess_gain_excess_loss_numba(nav, hurdle):
+def _bull_excess_gain_excess_loss_numba(nav, hurdle):
+    """Numba-accelerated bull epoch detection for LONG positions."""
     excess_gain = excess_loss = 0
     excess_gains = [0]
     excess_losses = [0]
-    excess_gains_at_ith_epoch = [0]
+    excess_gains_at_bull_epoch = [0]
     last_reset_state = False
-    ith_epochs = [False] * len(nav)
+    bull_epochs = [False] * len(nav)
     endorsing_crest = endorsing_nadir = candidate_crest = candidate_nadir = nav[0]
     for i, (equity, next_equity) in enumerate(zip(nav[:-1], nav[1:])):
         if next_equity > candidate_crest:
@@ -628,54 +639,60 @@ def _excess_gain_excess_loss_numba(nav, hurdle):
         if reset_candidate_nadir_excess_gain_and_excess_loss:
             endorsing_crest = candidate_crest
             endorsing_nadir = candidate_nadir = equity
-            excess_gains_at_ith_epoch.append(excess_gain if not last_reset_state else 0)
+            excess_gains_at_bull_epoch.append(excess_gain if not last_reset_state else 0)
         else:
             endorsing_nadir = min(endorsing_nadir, equity)
-            excess_gains_at_ith_epoch.append(0)
+            excess_gains_at_bull_epoch.append(0)
         last_reset_state = reset_candidate_nadir_excess_gain_and_excess_loss
         excess_gains.append(excess_gain)
         excess_losses.append(excess_loss)
         if reset_candidate_nadir_excess_gain_and_excess_loss:
             excess_gain = excess_loss = 0
-        ith_epoch_condition = (
+        bull_epoch_condition = (
             len(excess_gains) > 1
             and excess_gains[-1] > excess_losses[-1]
             and excess_gains[-1] > hurdle
         )
-        ith_epochs[i + 1] = ith_epoch_condition
-    num_of_ith_epochs = ith_epochs.count(True)
-    ith_interval_separators = [i for i, x in enumerate(ith_epochs) if x]
-    ith_interval_separators.insert(0, 0)
-    ith_intervals = np.diff(
-        np.array(ith_interval_separators)
+        bull_epochs[i + 1] = bull_epoch_condition
+    num_of_bull_epochs = bull_epochs.count(True)
+    bull_interval_separators = [i for i, x in enumerate(bull_epochs) if x]
+    bull_interval_separators.insert(0, 0)
+    bull_intervals = np.diff(
+        np.array(bull_interval_separators)
     )  # Convert to NumPy array before using np.diff
-    ith_intervals_cv = (
-        np.std(ith_intervals) / np.mean(ith_intervals)
-        if len(ith_intervals) > 0
+    bull_intervals_cv = (
+        np.std(bull_intervals) / np.mean(bull_intervals)
+        if len(bull_intervals) > 0
         else np.nan
     )
-    return ExcessGainLossResult(
+    return BullExcessGainLossResult(
         excess_gains=np.array(excess_gains),
         excess_losses=np.array(excess_losses),
-        num_of_ith_epochs=num_of_ith_epochs,
-        ith_epochs=np.array(ith_epochs),
-        ith_intervals_cv=ith_intervals_cv,
+        num_of_bull_epochs=num_of_bull_epochs,
+        bull_epochs=np.array(bull_epochs),
+        bull_intervals_cv=bull_intervals_cv,
     )
 
 
-def excess_gain_excess_loss_numba(hurdle, nav):
+def bull_excess_gain_excess_loss_numba(hurdle, nav):
+    """Wrapper for bull epoch calculation that handles DataFrame input."""
     original_df = (
         nav.copy() if isinstance(nav, pd.DataFrame) and "NAV" in nav.columns else None
     )
     nav = nav["NAV"].values if original_df is not None else nav.values
-    result = _excess_gain_excess_loss_numba(nav, hurdle)
+    result = _bull_excess_gain_excess_loss_numba(nav, hurdle)
     if original_df is not None:
         original_df["Excess Gains"] = result.excess_gains
         original_df["Excess Losses"] = result.excess_losses
-        original_df["ITHEs"] = result.ith_epochs
+        original_df["BullEpochs"] = result.bull_epochs
         return original_df
     else:
         return result
+
+
+# Backwards compatibility alias
+excess_gain_excess_loss_numba = bull_excess_gain_excess_loss_numba
+_excess_gain_excess_loss_numba = _bull_excess_gain_excess_loss_numba
 
 
 def get_first_non_zero_digits(num, digit_count):
@@ -705,7 +722,7 @@ def pnl_from_nav(nav_data) -> PnLResult:
 class ProcessNavDataResult(NamedTuple):
     qualified_results: int
     sharpe_ratio: float
-    num_of_ith_epochs: int
+    num_of_bull_epochs: int
     filename: str
     uid: str
     fig: go.Figure  # Add fig to the NamedTuple
@@ -716,9 +733,9 @@ def log_results(results):
     headers = [
         "TMAEG",
         "Sharpe<br/>Ratio",
-        "ITH<br/>Epochs<br/>Count",
+        "Bull<br/>Epochs<br/>Count",
         "EL CV",
-        "ITH CV",
+        "Bull CV",
         "AGG CV",
         "Avg Days<br/>Per Epoch",
         "Recent 3<br/>Max Days",
@@ -745,7 +762,7 @@ def log_results(results):
 
     # Create a new column with HTML links
     df["Link"] = df["Filename"].apply(
-        lambda x: f'<a href="synth_ithes/{x}" target="_blank">Open</a>'
+        lambda x: f'<a href="synth_bull_ithes/{x}" target="_blank">Open</a>'
     )
 
     # Reorder columns to put Data Source before Link, and exclude Filename
@@ -769,7 +786,7 @@ def log_results(results):
     html_output = f"""
     <html>
     <head>
-    <title>ITH Fitness Analysis Results</title>
+    <title>Bull ITH Fitness Analysis Results</title>
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.21/css/jquery.dataTables.css">
     <link rel="stylesheet" href="https://classless.de/classless.css">
     <style>
@@ -801,18 +818,18 @@ def log_results(results):
     </head>
     <body>
     <div class="container">
-        <h1>ITH Fitness Analysis Results</h1>
+        <h1>Bull ITH Fitness Analysis Results</h1>
         {html_table}
     </div>
     </body>
     </html>
     """
 
-    html_file_path = get_artifacts_dir() / "results.html"
+    html_file_path = get_artifacts_dir() / "bull_results.html"
     with open(html_file_path, "w") as file:
         file.write(html_output)
 
-    logger.success("Results have been written to results.html")
+    logger.success("Results have been written to bull_results.html")
     console.print(f"📊 [bold green]Results saved to:[/bold green] {html_file_path}")
 
     # Automatically open the HTML file in the default web browser if enabled
@@ -844,8 +861,8 @@ def process_nav_data(
 
     # Initialize filename with a default value
     filename = None
-    ith_durations = None
-    excess_losses_at_ithes = None
+    bull_durations = None
+    excess_losses_at_bull_epochs = None
     fig = None  # Initialize fig to None
 
     # Calculate days_elapsed here
@@ -855,102 +872,102 @@ def process_nav_data(
     calculated_nav = excess_gain_excess_loss_numba(TMAEG, nav_data)
 
     if isinstance(calculated_nav, pd.DataFrame):
-        ith_epochs = calculated_nav[calculated_nav["ITHEs"]].index
-        num_of_ith_epochs = len(ith_epochs)
+        bull_epochs_idx = calculated_nav[calculated_nav["BullEpochs"]].index
+        num_of_bull_epochs = len(bull_epochs_idx)
     else:
-        ith_epochs = nav_data.index[calculated_nav.ith_epochs]
-        num_of_ith_epochs = calculated_nav.num_of_ith_epochs
+        bull_epochs_idx = nav_data.index[calculated_nav.bull_epochs]
+        num_of_bull_epochs = calculated_nav.num_of_bull_epochs
 
     # Add detailed logging for threshold checks
     logger.debug(f"Threshold check details: bypass_thresholds={bypass_thresholds}")
     logger.debug(f"SR check: {sr_lower_bound} < {sharpe_ratio} < {sr_upper_bound}")
     logger.debug(
-        f"Investment Time Horizon epochs check: {ith_epochs_lower_bound} < {num_of_ith_epochs} < {ith_epochs_upper_bound}"
+        f"Bull epochs check: {bull_epochs_lower_bound} < {num_of_bull_epochs} < {bull_epochs_upper_bound}"
     )
 
     if bypass_thresholds or (
         sr_lower_bound < sharpe_ratio < sr_upper_bound
-        and ith_epochs_lower_bound < num_of_ith_epochs < ith_epochs_upper_bound
+        and bull_epochs_lower_bound < num_of_bull_epochs < bull_epochs_upper_bound
     ):
         if bypass_thresholds:
             logger.debug("Bypassing thresholds for custom CSV.")
         else:
             logger.debug("Thresholds met for synthetic data.")
 
-        logger.debug(f"Found {num_of_ith_epochs=}, {sharpe_ratio=}")
+        logger.debug(f"Found {num_of_bull_epochs=}, {sharpe_ratio=}")
 
-        # Get actual ITH epoch dates (confirmed epochs only)
-        ith_epoch_dates = calculated_nav[calculated_nav["ITHEs"]].index
+        # Get actual bull epoch dates (confirmed epochs only)
+        bull_epoch_dates = calculated_nav[calculated_nav["BullEpochs"]].index
 
         # Create complete timeline with start, epochs, and end for interval calculation
         # Only include the end date if it's NOT already an epoch (to avoid double counting)
-        timeline_dates = ith_epoch_dates.insert(0, calculated_nav.index[0])
-        if not calculated_nav["ITHEs"].iloc[-1]:  # Only add end if it's not an epoch
+        timeline_dates = bull_epoch_dates.insert(0, calculated_nav.index[0])
+        if not calculated_nav["BullEpochs"].iloc[-1]:  # Only add end if it's not an epoch
             timeline_dates = timeline_dates.append(pd.Index([calculated_nav.index[-1]]))
 
         logger.debug(f"timeline_dates: {timeline_dates}")
 
-        # Calculate actual confirmed ITH epoch count (excluding artificial boundaries)
-        ithe_ct = len(ith_epoch_dates)  # Only count real epochs
+        # Calculate actual confirmed bull epoch count (excluding artificial boundaries)
+        bull_epoch_ct = len(bull_epoch_dates)  # Only count real epochs
 
         # Calculate intervals in days between timeline points
         timeline_indices = [
             calculated_nav.index.get_loc(date) for date in timeline_dates
         ]
-        ith_durations_indices = np.diff(timeline_indices)
+        bull_durations_indices = np.diff(timeline_indices)
 
         # Convert index differences to actual days
         date_diffs = [
             (timeline_dates[i + 1] - timeline_dates[i]).days
             for i in range(len(timeline_dates) - 1)
         ]
-        ith_durations_days = np.array(date_diffs)
+        bull_durations_days = np.array(date_diffs)
 
-        logger.debug(f"ith_durations_indices: {ith_durations_indices}")
-        logger.debug(f"ith_durations_days: {ith_durations_days}")
+        logger.debug(f"bull_durations_indices: {bull_durations_indices}")
+        logger.debug(f"bull_durations_days: {bull_durations_days}")
 
-        # Calculate average days to ITH epoch (traditional metric)
-        days_taken_to_ithe = days_elapsed / ithe_ct if ithe_ct > 0 else np.nan
+        # Calculate average days to bull epoch (traditional metric)
+        days_taken_to_bull_epoch = days_elapsed / bull_epoch_ct if bull_epoch_ct > 0 else np.nan
 
         # Calculate maximum of recent 3 timespan durations in days
         recent_3_max_days = (
-            np.max(ith_durations_days[-3:])
-            if len(ith_durations_days) >= 3
-            else np.max(ith_durations_days) if len(ith_durations_days) > 0 else np.nan
+            np.max(bull_durations_days[-3:])
+            if len(bull_durations_days) >= 3
+            else np.max(bull_durations_days) if len(bull_durations_days) > 0 else np.nan
         )
 
-        # Calculate ITH CV using index-based durations for consistency
-        ith_cv = (
-            np.std(ith_durations_indices) / np.mean(ith_durations_indices)
-            if len(ith_durations_indices) > 0
+        # Calculate bull CV using index-based durations for consistency
+        bull_cv = (
+            np.std(bull_durations_indices) / np.mean(bull_durations_indices)
+            if len(bull_durations_indices) > 0
             else np.nan
         )
 
-        # Calculate the coefficient of variation for Excess Losses at ITH Epochs
-        excess_losses_at_ithes = calculated_nav[calculated_nav["ITHEs"]][
+        # Calculate the coefficient of variation for Excess Losses at Bull Epochs
+        excess_losses_at_bull_epochs = calculated_nav[calculated_nav["BullEpochs"]][
             "Excess Losses"
         ]
-        excess_losses_at_ithes = excess_losses_at_ithes[
-            excess_losses_at_ithes != 0
+        excess_losses_at_bull_epochs = excess_losses_at_bull_epochs[
+            excess_losses_at_bull_epochs != 0
         ]  # Exclude zero values
         last_excess_loss = calculated_nav["Excess Losses"].iloc[
             -1
-        ]  # Include the last value of Excess Losses (even if it is not flagged with ITH Epoch True), unless it's already included
-        if not calculated_nav["ITHEs"].iloc[
+        ]  # Include the last value of Excess Losses (even if it is not flagged with Bull Epoch True), unless it's already included
+        if not calculated_nav["BullEpochs"].iloc[
             -1
-        ]:  # Check if the last value of ITH Epoch is False
-            excess_losses_at_ithes = pd.concat(
+        ]:  # Check if the last value of Bull Epoch is False
+            excess_losses_at_bull_epochs = pd.concat(
                 [
-                    excess_losses_at_ithes,
+                    excess_losses_at_bull_epochs,
                     pd.Series([last_excess_loss], index=[calculated_nav.index[-1]]),
                 ]
             )
-        if excess_losses_at_ithes.empty:  # Check if excess_losses_at_ithes is empty
+        if excess_losses_at_bull_epochs.empty:  # Check if excess_losses_at_bull_epochs is empty
             el_cv = np.nan  # Return NaN or some other appropriate value
         else:
-            el_cv = np.std(excess_losses_at_ithes) / np.mean(excess_losses_at_ithes)
+            el_cv = np.std(excess_losses_at_bull_epochs) / np.mean(excess_losses_at_bull_epochs)
 
-        aggcv = max(el_cv, ith_cv)
+        aggcv = max(el_cv, bull_cv)
         logger.debug(f"{aggcv=}")
 
         # Add logging for aggcv check
@@ -962,20 +979,20 @@ def process_nav_data(
                 filename = (
                     f"nav_ming_xu_"
                     f"EL_{el_cv:.5f}_"
-                    f"ITHC_{ith_cv:.5f}_"
+                    f"BullCV_{bull_cv:.5f}_"
                     f"TMAEG_{TMAEG:.5f}_"
-                    f"ITHEs_{ithe_ct}_"
-                    f"D2ITHE_{days_taken_to_ithe:.2f}_"
+                    f"BullEpochs_{bull_epoch_ct}_"
+                    f"D2BE_{days_taken_to_bull_epoch:.2f}_"
                     f"SR_{sharpe_ratio:.4f}_"
                     f"UID_{uid}.html"
                 )
             else:
                 filename = (
                     f"EL_{el_cv:.5f}_"
-                    f"ITHC_{ith_cv:.5f}_"
+                    f"BullCV_{bull_cv:.5f}_"
                     f"TMAEG_{TMAEG:.5f}_"
-                    f"ITHEs_{ithe_ct}_"
-                    f"D2ITHE_{days_taken_to_ithe:.2f}_"
+                    f"BullEpochs_{bull_epoch_ct}_"
+                    f"D2BE_{days_taken_to_bull_epoch:.2f}_"
                     f"SR_{sharpe_ratio:.4f}_"
                     f"UID_{uid}.html"
                 )
@@ -988,17 +1005,17 @@ def process_nav_data(
                 subplot_titles=("NAV", "Excess Gains & Losses"),
             )
 
-            ith_epochs = calculated_nav[calculated_nav["ITHEs"]].index
-            num_of_ith_epochs = len(ith_epochs)
-            ithes_dir = output_dir / f"ITH_Epochs_{num_of_ith_epochs}"
-            ithes_dir.mkdir(parents=True, exist_ok=True)
-            crossover_epochs = calculated_nav.loc[ith_epochs]
+            bull_epoch_indices = calculated_nav[calculated_nav["BullEpochs"]].index
+            num_of_bull_epochs_local = len(bull_epoch_indices)
+            bull_epochs_dir = output_dir / f"Bull_Epochs_{num_of_bull_epochs_local}"
+            bull_epochs_dir.mkdir(parents=True, exist_ok=True)
+            crossover_epochs = calculated_nav.loc[bull_epoch_indices]
             fig.add_trace(
                 go.Scatter(
                     x=crossover_epochs.index,
                     y=crossover_epochs["NAV"],
                     mode="markers",
-                    name="ITH Epochs on NAV",
+                    name="Bull Epochs on NAV",
                     marker=dict(color="darkgoldenrod", size=20),
                 ),
                 row=1,
@@ -1009,7 +1026,7 @@ def process_nav_data(
                     x=crossover_epochs.index,
                     y=crossover_epochs["Excess Gains"],
                     mode="markers",
-                    name="ITH Epochs on Excess Gains",
+                    name="Bull Epochs on Excess Gains",
                     marker=dict(color="blue", size=20),
                 ),
                 row=2,
@@ -1048,7 +1065,7 @@ def process_nav_data(
                 col=1,
             )
             fig.update_layout(
-                title=f"{num_of_ith_epochs} Investment Time Horizon Epochs -- {filename}",
+                title=f"{num_of_bull_epochs_local} Bull Epochs -- {filename}",
                 autosize=True,  # Enable autosize for responsive layout
                 margin=plot_config.margin,
                 paper_bgcolor=plot_config.paper_bgcolor,
@@ -1152,7 +1169,7 @@ def process_nav_data(
                 qualified_results += 1
 
             logger.debug(
-                f"Generated {TMAEG=}, {sharpe_ratio=}, {num_of_ith_epochs=}, {el_cv=},{ith_cv=}, {aggcv=}, {days_taken_to_ithe=}"
+                f"Generated {TMAEG=}, {sharpe_ratio=}, {num_of_bull_epochs=}, {el_cv=},{bull_cv=}, {aggcv=}, {days_taken_to_bull_epoch=}"
             )
 
         # Append the results to the list only if filename is not None
@@ -1161,11 +1178,11 @@ def process_nav_data(
                 [
                     TMAEG,
                     sharpe_ratio,
-                    num_of_ith_epochs,
+                    num_of_bull_epochs,
                     el_cv,
-                    ith_cv,
+                    bull_cv,
                     aggcv,
-                    days_taken_to_ithe,
+                    days_taken_to_bull_epoch,
                     recent_3_max_days,
                     filename,
                     data_source,
@@ -1180,17 +1197,17 @@ def process_nav_data(
     else:
         pass  # Removed repetitive warning logs
 
-    if ith_durations is not None:
-        logger.debug(f"ith_durations in process_nav_data: {ith_durations}")
+    if bull_durations is not None:
+        logger.debug(f"bull_durations in process_nav_data: {bull_durations}")
 
     logger.debug(
-        f"excess_losses_at_ithes in process_nav_data: {excess_losses_at_ithes}"
+        f"excess_losses_at_bull_epochs in process_nav_data: {excess_losses_at_bull_epochs}"
     )
 
     return ProcessNavDataResult(
         qualified_results=qualified_results,
         sharpe_ratio=sharpe_ratio,
-        num_of_ith_epochs=num_of_ith_epochs,
+        num_of_bull_epochs=num_of_bull_epochs,
         filename=filename,
         uid=uid,
         fig=fig,  # Return the fig object

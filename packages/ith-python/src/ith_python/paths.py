@@ -29,9 +29,23 @@ def get_custom_nav_dir() -> Path:
     return get_data_dir() / "nav_data_custom"
 
 
+def get_synth_bull_ithes_dir() -> Path:
+    """Return the synthetic Bull ITH output directory."""
+    return get_artifacts_dir() / "synth_bull_ithes"
+
+
+def get_synth_bear_ithes_dir() -> Path:
+    """Return the synthetic Bear ITH output directory."""
+    return get_artifacts_dir() / "synth_bear_ithes"
+
+
+# Deprecated alias for backwards compatibility
 def get_synth_ithes_dir() -> Path:
-    """Return the synthetic ITH output directory."""
-    return get_artifacts_dir() / "synth_ithes"
+    """Return the synthetic ITH output directory.
+
+    DEPRECATED: Use get_synth_bull_ithes_dir() instead.
+    """
+    return get_synth_bull_ithes_dir()
 
 
 def ensure_dirs() -> None:
@@ -41,6 +55,7 @@ def ensure_dirs() -> None:
         get_artifacts_dir(),
         get_log_dir(),
         get_custom_nav_dir(),
-        get_synth_ithes_dir(),
+        get_synth_bull_ithes_dir(),
+        get_synth_bear_ithes_dir(),
     ]:
         d.mkdir(parents=True, exist_ok=True)

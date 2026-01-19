@@ -8,7 +8,9 @@ from ith_python.paths import (
     get_artifacts_dir,
     get_log_dir,
     get_custom_nav_dir,
-    get_synth_ithes_dir,
+    get_synth_bull_ithes_dir,
+    get_synth_bear_ithes_dir,
+    get_synth_ithes_dir,  # Deprecated alias for backwards compatibility
     ensure_dirs,
 )
 
@@ -54,11 +56,21 @@ class TestPathFunctions:
         assert custom_nav_dir == REPO_ROOT / "data" / "nav_data_custom"
         assert isinstance(custom_nav_dir, Path)
 
-    def test_get_synth_ithes_dir(self):
-        """get_synth_ithes_dir returns correct nested path."""
-        synth_dir = get_synth_ithes_dir()
-        assert synth_dir == REPO_ROOT / "artifacts" / "synth_ithes"
+    def test_get_synth_bull_ithes_dir(self):
+        """get_synth_bull_ithes_dir returns correct nested path."""
+        synth_dir = get_synth_bull_ithes_dir()
+        assert synth_dir == REPO_ROOT / "artifacts" / "synth_bull_ithes"
         assert isinstance(synth_dir, Path)
+
+    def test_get_synth_bear_ithes_dir(self):
+        """get_synth_bear_ithes_dir returns correct nested path."""
+        synth_dir = get_synth_bear_ithes_dir()
+        assert synth_dir == REPO_ROOT / "artifacts" / "synth_bear_ithes"
+        assert isinstance(synth_dir, Path)
+
+    def test_get_synth_ithes_dir_deprecated_alias(self):
+        """get_synth_ithes_dir (deprecated) should match get_synth_bull_ithes_dir."""
+        assert get_synth_ithes_dir() == get_synth_bull_ithes_dir()
 
 
 class TestEnsureDirs:
@@ -72,7 +84,8 @@ class TestEnsureDirs:
         assert get_artifacts_dir().exists()
         assert get_log_dir().exists()
         assert get_custom_nav_dir().exists()
-        assert get_synth_ithes_dir().exists()
+        assert get_synth_bull_ithes_dir().exists()
+        assert get_synth_bear_ithes_dir().exists()
 
     def test_ensure_dirs_is_idempotent(self):
         """Calling ensure_dirs multiple times should not raise errors."""

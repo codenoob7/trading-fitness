@@ -108,28 +108,35 @@ class TestMaxDrawdown:
         assert result.max_drawdown == pytest.approx(expected, rel=0.01)
 
 
-class TestIthConfig:
-    """Tests for IthConfig defaults."""
+class TestBullIthConfig:
+    """Tests for BullIthConfig defaults."""
 
     def test_default_config_values(self):
-        """IthConfig should have sensible defaults."""
-        from ith_python.ith import IthConfig
+        """BullIthConfig should have sensible defaults."""
+        from ith_python.ith import BullIthConfig
 
-        config = IthConfig()
+        config = BullIthConfig()
 
         assert config.delete_everything is False
         assert config.TMAEG == 0.05
-        assert config.ith_epochs_lower_bound == 10
+        assert config.bull_epochs_lower_bound == 10
         assert config.sr_lower_bound == 0.5
         assert config.sr_upper_bound == 9.9
 
     def test_config_is_immutable(self):
         """NamedTuple config should be immutable."""
-        from ith_python.ith import IthConfig
+        from ith_python.ith import BullIthConfig
 
-        config = IthConfig()
+        config = BullIthConfig()
         with pytest.raises(AttributeError):
             config.TMAEG = 0.10
+
+    def test_backwards_compatibility_alias(self):
+        """IthConfig alias should work for backwards compatibility."""
+        from ith_python.ith import IthConfig, BullIthConfig
+
+        # IthConfig should be an alias for BullIthConfig
+        assert IthConfig is BullIthConfig
 
 
 class TestSyntheticNavParams:

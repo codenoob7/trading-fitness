@@ -1,9 +1,16 @@
 """Shared test fixtures for ith-python tests."""
 
+import sys
+from pathlib import Path
+
+# Add tests directory to path for importing fixtures
+tests_dir = Path(__file__).parent
+if str(tests_dir) not in sys.path:
+    sys.path.insert(0, str(tests_dir))
+
 import numpy as np
 import pandas as pd
 import pytest
-from pathlib import Path
 import tempfile
 import shutil
 
