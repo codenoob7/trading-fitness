@@ -33,3 +33,15 @@ node_modules/
 # Tool outputs
 .lychee-results.json
 .link-check-results.md
+
+# Python compiled extensions (build artifacts)
+*.cpython-*-darwin.so
+*.cpython-*-linux-gnu.so
+
+# Proptest regression files
+proptest-regressions/
+*.proptest-regressions
+
+# Package-specific generated outputs
+packages/ith-python/synth_ithes/
+packages/ith-python/results.html
