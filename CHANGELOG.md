@@ -1,3 +1,24 @@
+# [2.2.0](https://github.com/terrylica/trading-fitness/compare/v2.1.0...v2.2.0) (2026-01-21)
+
+
+### Bug Fixes
+
+* **ith-python:** constrain Python version to 3.12 ([be2eeaf](https://github.com/terrylica/trading-fitness/commit/be2eeafe586b757fd2a86389fd58d09df87b62bc))
+
+
+### Features
+
+* **ith-python:** add cross-validation utilities ([497f6ac](https://github.com/terrylica/trading-fitness/commit/497f6ac4c568895eda67362783617438cb44f58f))
+* **ith-python:** add package-level mise.toml ([9a766ff](https://github.com/terrylica/trading-fitness/commit/9a766ffb4f1328949afe6d0749ae1dfc1f9ba8f5))
+* **metrics-rust:** add proptest property-based tests ([86d6acd](https://github.com/terrylica/trading-fitness/commit/86d6acdcffbf14081d2a134be0aeae2e78eb8675))
+* **metrics-rust:** improve ITH implementation and add proptest dep ([9ae5fb6](https://github.com/terrylica/trading-fitness/commit/9ae5fb664a053a50b95fa3fe55b5a769cb98d7ba))
+* **mise:** add metrics-rust tasks and orchestration ([3556520](https://github.com/terrylica/trading-fitness/commit/35565201dfb9225be0d60b1a08987b88ab67fd6a))
+
+
+### Performance Improvements
+
+* **ith-python:** add batch NAV generation with Numba parallel ([b67e6a4](https://github.com/terrylica/trading-fitness/commit/b67e6a450856b778e579cb8c9f5fa5856d382b43))
+
 # [2.1.0](https://github.com/terrylica/trading-fitness/compare/v2.0.0...v2.1.0) (2026-01-20)
 
 
