@@ -1,0 +1,70 @@
+# ith-python package - mise configuration
+# Inherits from root mise.toml, adds package-specific tasks
+
+[env]
+# Package-specific environment (inherits GH_TOKEN, LOG_DIR from root)
+ITH_OUTPUT_DIR = "{{config_root}}/../../artifacts"
+
+# =============================================================================
+# ITH Analysis Tasks (Package-Specific)
+# =============================================================================
+
+[tasks.run]
+description = "Run Bull ITH analysis (default)"
+run = "unset UV_PYTHON && uv run python -m ith_python.ith"
+
+[tasks."run:bull"]
+description = "Run Bull (long) ITH analysis"
+run = "unset UV_PYTHON && uv run python -m ith_python.ith"
+
+[tasks."run:bear"]
+description = "Run Bear (short) ITH analysis"
+run = "unset UV_PYTHON && uv run python -m ith_python.bear_ith"
+
+[tasks."run:both"]
+description = "Run Bull then Bear ITH analysis sequentially"
+depends = ["run:bull", "run:bear"]
+
+[tasks.test]
+description = "Run ith-python tests"
+run = "unset UV_PYTHON && uv run pytest"
+
+[tasks.lint]
+description = "Lint ith-python with ruff"
+run = "unset UV_PYTHON && uv run ruff check --fix"
+
+[tasks.sync]
+description = "Sync dependencies"
+run = "unset UV_PYTHON && uv sync"
+
+# =============================================================================
+# Fresh Generation (Clear Artifacts First)
+# =============================================================================
+
+[tasks."fresh:bull"]
+description = "Fresh Bull ITH - clear artifacts and generate 100 new"
+run = """
+echo "🗑️  Clearing bull artifacts..."
+rm -rf ../../artifacts/synth_bull_ithes/nav_data_synthetic/*.csv
+rm -rf ../../artifacts/synth_bull_ithes/*.html
+rm -rf ../../artifacts/synth_bull_ithes/*.csv
+rm -f ../../artifacts/bull_results.html
+echo "✅ Bull artifacts cleared"
+unset UV_PYTHON && uv run python -m ith_python.ith
+"""
+
+[tasks."fresh:bear"]
+description = "Fresh Bear ITH - clear artifacts and generate 100 new"
+run = """
+echo "🗑️  Clearing bear artifacts..."
+rm -rf ../../artifacts/synth_bear_ithes/nav_data_synthetic/*.csv
+rm -rf ../../artifacts/synth_bear_ithes/*.html
+rm -rf ../../artifacts/synth_bear_ithes/*.csv
+rm -f ../../artifacts/bear_results.html
+echo "✅ Bear artifacts cleared"
+unset UV_PYTHON && uv run python -m ith_python.bear_ith
+"""
+
+[tasks."fresh:both"]
+description = "Fresh Bull + Bear ITH - clear all and generate 100 each"
+depends = ["fresh:bull", "fresh:bear"]
