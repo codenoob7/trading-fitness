@@ -1,5 +1,6 @@
-# Trading Fitness - mise configuration
-# SSoT for runtime versions and environment
+# Trading Fitness - Root mise configuration
+# SSoT for runtime versions and shared environment
+# Package-specific tasks are in packages/*/mise.toml
 
 [env]
 GH_TOKEN = "{{ read_file(path=env.HOME ~ '/.claude/.secrets/gh-token-terrylica') | trim }}"
@@ -8,12 +9,16 @@ LOG_DIR = "{{config_root}}/logs"
 ENV = "dev"
 
 [tools]
-python = "3.12"    # SSoT-OK: mise manages runtime versions
+python = "3.13"    # SSoT-OK: mise manages runtime versions
 rust = "stable"    # SSoT-OK: mise manages runtime versions
 node = "22"        # SSoT-OK: mise manages runtime versions
 bun = "latest"     # SSoT-OK: mise manages runtime versions
 uv = "latest"      # SSoT-OK: mise manages runtime versions
 "cargo:ast-grep" = "latest"  # SSoT-OK: structural code search
+
+# =============================================================================
+# Monorepo-Wide Tasks
+# =============================================================================
 
 [tasks.lint]
 description = "Lint all packages"
@@ -21,20 +26,10 @@ run = "cd packages/ith-python && uv run ruff check --fix"
 
 [tasks.test]
 description = "Test all packages"
-run = "cd packages/ith-python && uv run pytest"
-
-[tasks.analyze]
-description = "Run ITH analysis (bull then bear, sequentially)"
-depends = ["analyze:bear"]  # bear depends on bull, so runs bull->bear
-
-[tasks."analyze:bull"]
-description = "Run Bull (long) ITH analysis"
-run = "cd packages/ith-python && uv run python -m ith_python.ith"
-
-[tasks."analyze:bear"]
-description = "Run Bear (short) ITH analysis"
-depends = ["analyze:bull"]  # Run after bull completes
-run = "cd packages/ith-python && uv run python -m ith_python.bear_ith"
+run = """
+cd packages/ith-python && unset UV_PYTHON && uv run pytest
+cargo nextest run -p trading-fitness-metrics
+"""
 
 [tasks.affected]
 description = "List affected packages"
@@ -42,6 +37,59 @@ run = "bash scripts/affected.sh list"
 
 [tasks."test:affected"]
 run = "bash scripts/affected.sh test"
+
+# =============================================================================
+# ITH Analysis - Orchestration (delegates to package tasks)
+# Two modes: incremental (default) and fresh (clear first)
+# =============================================================================
+
+[tasks.analyze]
+description = "Incremental ITH analysis - preserves existing, generates up to 100 total"
+depends = ["analyze:bear"]
+run = "open artifacts/bull_results.html artifacts/bear_results.html"
+
+[tasks."analyze:fresh"]
+description = "Fresh ITH analysis - clears all artifacts, generates 100 new results"
+depends = ["analyze:fresh:bear"]
+run = "open artifacts/bull_results.html artifacts/bear_results.html"
+
+[tasks."analyze:bull"]
+description = "Incremental Bull ITH - preserves existing synthetic NAVs"
+run = "unset UV_PYTHON && cd packages/ith-python && uv run python -m ith_python.ith"
+
+[tasks."analyze:bear"]
+description = "Incremental Bear ITH - preserves existing synthetic NAVs"
+depends = ["analyze:bull"]
+run = "unset UV_PYTHON && cd packages/ith-python && uv run python -m ith_python.bear_ith"
+
+[tasks."analyze:fresh:bull"]
+description = "Fresh Bull ITH - clears artifacts first, generates 100 new"
+run = """
+echo "🗑️  Clearing bull artifacts..."
+rm -rf artifacts/synth_bull_ithes/nav_data_synthetic/*.csv
+rm -rf artifacts/synth_bull_ithes/*.html
+rm -rf artifacts/synth_bull_ithes/*.csv
+rm -f artifacts/bull_results.html
+echo "✅ Bull artifacts cleared"
+unset UV_PYTHON && cd packages/ith-python && uv run python -m ith_python.ith
+"""
+
+[tasks."analyze:fresh:bear"]
+description = "Fresh Bear ITH - clears artifacts first, generates 100 new"
+depends = ["analyze:fresh:bull"]
+run = """
+echo "🗑️  Clearing bear artifacts..."
+rm -rf artifacts/synth_bear_ithes/nav_data_synthetic/*.csv
+rm -rf artifacts/synth_bear_ithes/*.html
+rm -rf artifacts/synth_bear_ithes/*.csv
+rm -f artifacts/bear_results.html
+echo "✅ Bear artifacts cleared"
+unset UV_PYTHON && cd packages/ith-python && uv run python -m ith_python.bear_ith
+"""
+
+# =============================================================================
+# Type Generation (Shared Types Package)
+# =============================================================================
 
 [tasks.generate-types]
 description = "Generate types from JSON Schema"
@@ -58,3 +106,45 @@ run = "bash scripts/generate-types.sh typescript"
 [tasks."generate-types:rust"]
 description = "Generate Rust types from JSON Schema"
 run = "bash scripts/generate-types.sh rust"
+
+# =============================================================================
+# metrics-rust: Rust library + Python bindings (PyO3/maturin)
+# =============================================================================
+
+[tasks."build:metrics-rust"]
+description = "Build metrics-rust Rust library"
+run = "cargo build -p trading-fitness-metrics"
+
+[tasks."test:metrics-rust"]
+description = "Test metrics-rust (Rust unit + integration)"
+run = "cargo nextest run -p trading-fitness-metrics"
+
+[tasks."test:metrics-rust:doc"]
+description = "Test metrics-rust documentation examples"
+run = "cargo test --doc -p trading-fitness-metrics"
+
+[tasks."develop:metrics-rust"]
+description = "Build Python bindings and install into ith-python venv"
+run = """
+unset UV_PYTHON
+PYTHON=$(packages/ith-python/.venv/bin/python --version | cut -d' ' -f2 | cut -d. -f1-2)
+echo "Building wheel for Python $PYTHON"
+maturin build --features python --manifest-path packages/metrics-rust/Cargo.toml -i packages/ith-python/.venv/bin/python
+WHEEL=$(realpath target/wheels/trading_fitness_metrics-*cp${PYTHON//./}*.whl 2>/dev/null | sort -r | head -1)
+if [ -z "$WHEEL" ]; then echo "No wheel found for Python $PYTHON"; exit 1; fi
+echo "Installing wheel: $WHEEL"
+cd packages/ith-python && unset UV_PYTHON && uv pip install "$WHEEL" --reinstall
+"""
+
+[tasks."build:metrics-rust:wheel"]
+description = "Build Python wheel for distribution"
+run = "cd packages/metrics-rust && maturin build --features python --release"
+
+[tasks."test:metrics-rust:all"]
+description = "Full metrics-rust test suite (Rust + rebuild Python bindings)"
+depends = ["test:metrics-rust", "test:metrics-rust:doc", "develop:metrics-rust"]
+
+[tasks."cross-validate:ith"]
+description = "Cross-validate Numba vs Rust ITH implementations"
+depends = ["develop:metrics-rust"]
+run = "cd packages/ith-python && unset UV_PYTHON && uv run --frozen python -m ith_python.side_by_side_demo"
