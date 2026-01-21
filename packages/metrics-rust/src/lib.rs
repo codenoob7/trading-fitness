@@ -38,6 +38,12 @@ pub mod types;
 #[cfg(feature = "python")]
 mod python;
 
+#[cfg(feature = "instrumented")]
+pub mod ith_instrumented;
+
+#[cfg(test)]
+mod proptest_strategies;
+
 // Re-export public API (9 price-only metrics)
 pub use entropy::{permutation_entropy, sample_entropy, shannon_entropy};
 pub use fractal::{fractal_dimension, hurst_exponent};
@@ -55,4 +61,11 @@ pub use adaptive::{
     adaptive_windows, optimal_bins_freedman_diaconis, optimal_embedding_dimension,
     optimal_sample_entropy_tolerance, relative_epsilon, AdaptiveTolerance,
     GarmanKlassNormalizer, MinimumSamples, OnlineNormalizer,
+};
+
+// Re-export instrumented ITH (for cross-validation)
+#[cfg(feature = "instrumented")]
+pub use ith_instrumented::{
+    bear_ith_instrumented, bull_ith_instrumented, BearIthInstrumentedResult,
+    BullIthInstrumentedResult, ITHStepLogger,
 };

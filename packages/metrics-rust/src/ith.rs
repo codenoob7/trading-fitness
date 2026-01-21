@@ -4,6 +4,9 @@
 //! ITH analysis evaluates strategy performance using TMAEG (Target Maximum
 //! Acceptable Excess Gain) thresholds to count epochs where the strategy
 //! exceeds performance hurdles.
+//!
+//! This implementation is aligned with the Numba Python reference implementation
+//! in `ith-python/src/ith_python/bull_ith_numba.py` and `bear_ith_numba.py`.
 
 use crate::types::{BearIthResult, BullIthResult};
 
@@ -14,8 +17,13 @@ use crate::types::{BearIthResult, BullIthResult};
 /// Calculate Bull ITH (long position) analysis.
 ///
 /// Bull ITH tracks excess gains (upside) and excess losses (drawdowns) for
-/// a long-only strategy. An epoch is counted when excess gain exceeds the
-/// TMAEG threshold.
+/// a long-only strategy using a state machine with dynamic baseline tracking.
+///
+/// The algorithm uses:
+/// - `endorsing_crest`: Confirmed HIGH we track performance FROM
+/// - `candidate_crest`: Potential new HIGH (favorable for longs)
+/// - `candidate_nadir`: Potential new LOW (drawdown = adverse for longs)
+/// - Epoch condition: `excess_gain > excess_loss AND excess_gain > hurdle AND new_high`
 ///
 /// # Arguments
 ///
@@ -52,56 +60,89 @@ pub fn bull_ith(nav: &[f64], tmaeg: f64) -> BullIthResult {
     let mut excess_losses = vec![0.0; n];
     let mut epochs = vec![false; n];
 
-    // Track running maximum (crest) for drawdown calculation
-    let mut crest = nav[0];
+    // State machine variables (aligned with Numba implementation)
+    let mut excess_gain = 0.0;
+    let mut excess_loss = 0.0;
+    let mut endorsing_crest = nav[0]; // Confirmed HIGH we track performance FROM
+    let mut endorsing_nadir = nav[0]; // Lowest point since endorsing_crest
+    let mut candidate_crest = nav[0]; // Potential new HIGH
+    let mut candidate_nadir = nav[0]; // Potential new LOW (drawdown)
+
+    // For max_drawdown calculation (separate from state machine)
+    let mut running_max = nav[0];
     let mut max_drawdown = 0.0;
 
-    // Track epoch intervals for CV calculation
-    let mut epoch_indices = Vec::new();
+    for i in 1..n {
+        let equity = nav[i - 1];
+        let next_equity = nav[i];
 
-    for i in 0..n {
-        let current = nav[i];
-
-        // Update crest (running maximum)
-        if current > crest {
-            crest = current;
+        // Track running max for max_drawdown (independent calculation)
+        if next_equity > running_max {
+            running_max = next_equity;
         }
-
-        // Excess gain: gain from the last trough (crest before drawdown)
-        // For simplicity, we track gain from initial NAV
-        let excess_gain = if nav[0] > 0.0 {
-            (current - nav[0]) / nav[0]
+        let current_drawdown = if running_max > 0.0 {
+            1.0 - next_equity / running_max
         } else {
             0.0
         };
+        if current_drawdown > max_drawdown {
+            max_drawdown = current_drawdown;
+        }
 
-        // Excess loss: current drawdown from crest
-        let excess_loss = if crest > 0.0 {
-            (crest - current) / crest
+        // Track new HIGHS (favorable for longs)
+        if next_equity > candidate_crest {
+            if endorsing_crest != 0.0 && next_equity != 0.0 {
+                // Excess gain = profit from price rally
+                excess_gain = next_equity / endorsing_crest - 1.0;
+            } else {
+                excess_gain = 0.0;
+            }
+            candidate_crest = next_equity;
+        }
+
+        // Track new LOWS (drawdown = adverse for longs)
+        if next_equity < candidate_nadir {
+            // Excess loss = drawdown hurts longs
+            if endorsing_crest != 0.0 {
+                excess_loss = 1.0 - next_equity / endorsing_crest;
+            } else {
+                excess_loss = 0.0;
+            }
+            candidate_nadir = next_equity;
+        }
+
+        // Reset condition: gains exceed losses, exceed hurdle, AND new high
+        let reset_condition = excess_gain > excess_loss.abs()
+            && excess_gain > tmaeg
+            && candidate_crest >= endorsing_crest;
+
+        if reset_condition {
+            endorsing_crest = candidate_crest;
+            endorsing_nadir = equity;
+            candidate_nadir = equity;
         } else {
-            0.0
-        };
-
-        excess_gains[i] = excess_gain.max(0.0);
-        excess_losses[i] = excess_loss.max(0.0);
-
-        // Track maximum drawdown
-        if excess_loss > max_drawdown {
-            max_drawdown = excess_loss;
+            endorsing_nadir = endorsing_nadir.min(equity);
         }
 
-        // Mark epoch if excess gain exceeds threshold
-        if excess_gain >= tmaeg {
-            epochs[i] = true;
-            epoch_indices.push(i);
+        excess_gains[i] = excess_gain;
+        excess_losses[i] = excess_loss;
+
+        if reset_condition {
+            excess_gain = 0.0;
+            excess_loss = 0.0;
         }
+
+        // Check bull epoch condition
+        let bull_epoch_condition =
+            excess_gains[i] > excess_losses[i] && excess_gains[i] > tmaeg;
+        epochs[i] = bull_epoch_condition;
     }
 
-    // Count distinct epochs (consecutive true values count as one)
-    let num_of_epochs = count_distinct_epochs(&epochs);
+    // Count epochs (sum of True values, matching Numba)
+    let num_of_epochs = epochs.iter().filter(|&&e| e).count();
 
-    // Calculate coefficient of variation of epoch intervals
-    let intervals_cv = calculate_intervals_cv(&epoch_indices);
+    // Calculate coefficient of variation of epoch intervals (matching Numba)
+    let intervals_cv = calculate_intervals_cv_numba_style(&epochs, num_of_epochs);
 
     BullIthResult {
         excess_gains,
@@ -119,9 +160,11 @@ pub fn bull_ith(nav: &[f64], tmaeg: f64) -> BullIthResult {
 
 /// Calculate Bear ITH (short position) analysis.
 ///
-/// Bear ITH tracks excess gains (downside for shorts) and excess losses
-/// (runups, which are adverse for shorts). An epoch is counted when the
-/// price drops enough to generate excess gain exceeding the TMAEG threshold.
+/// Bear ITH is the INVERSE of Bull ITH for short positions:
+/// - `endorsing_trough`: Confirmed LOW we track performance FROM (short entry)
+/// - `candidate_trough`: Potential new LOW (favorable for shorts)
+/// - `candidate_peak`: Potential new HIGH (runup = adverse for shorts)
+/// - Epoch condition: `excess_gain > excess_loss AND excess_gain > hurdle AND new_low`
 ///
 /// # Arguments
 ///
@@ -158,55 +201,91 @@ pub fn bear_ith(nav: &[f64], tmaeg: f64) -> BearIthResult {
     let mut excess_losses = vec![0.0; n];
     let mut epochs = vec![false; n];
 
-    // Track running minimum (trough) for runup calculation
-    let mut trough = nav[0];
+    // State machine variables (INVERTED from Bull, aligned with Numba)
+    let mut excess_gain = 0.0;
+    let mut excess_loss = 0.0;
+    let mut endorsing_trough = nav[0]; // Confirmed LOW we track performance FROM
+    let mut endorsing_peak = nav[0]; // Highest point since endorsing_trough
+    let mut candidate_trough = nav[0]; // Potential new LOW (favorable for shorts)
+    let mut candidate_peak = nav[0]; // Potential new HIGH (runup = adverse)
+
+    // For max_runup calculation (separate from state machine)
+    let mut running_min = nav[0];
     let mut max_runup = 0.0;
 
-    // Track epoch intervals for CV calculation
-    let mut epoch_indices = Vec::new();
+    for i in 1..n {
+        let equity = nav[i - 1];
+        let next_equity = nav[i];
 
-    for i in 0..n {
-        let current = nav[i];
-
-        // Update trough (running minimum)
-        if current < trough {
-            trough = current;
+        // Track running min for max_runup (independent calculation)
+        if next_equity < running_min {
+            running_min = next_equity;
         }
-
-        // Excess gain for shorts: price drop from initial
-        let excess_gain = if nav[0] > 0.0 {
-            (nav[0] - current) / nav[0]
+        let current_runup = if next_equity > 0.0 {
+            1.0 - running_min / next_equity
         } else {
             0.0
         };
+        if current_runup > max_runup {
+            max_runup = current_runup;
+        }
 
-        // Excess loss for shorts: runup from trough (adverse movement)
-        let excess_loss = if trough > 0.0 {
-            (current - trough) / trough
+        // INVERTED: Track new LOWS (favorable for shorts)
+        if next_equity < candidate_trough {
+            if endorsing_trough != 0.0 && next_equity != 0.0 {
+                // Excess gain = profit from price decline
+                // SYMMETRIC with bull: (trough/new) - 1
+                excess_gain = endorsing_trough / next_equity - 1.0;
+            } else {
+                excess_gain = 0.0;
+            }
+            candidate_trough = next_equity;
+        }
+
+        // INVERTED: Track new HIGHS (runup = adverse for shorts)
+        if next_equity > candidate_peak {
+            // Excess loss = runup hurts shorts
+            // SYMMETRIC with bull: 1 - (trough/new)
+            if next_equity != 0.0 {
+                excess_loss = 1.0 - endorsing_trough / next_equity;
+            } else {
+                excess_loss = 0.0;
+            }
+            candidate_peak = next_equity;
+        }
+
+        // INVERTED reset condition: gains exceed losses, exceed hurdle, AND new low
+        let reset_condition = excess_gain > excess_loss.abs()
+            && excess_gain > tmaeg
+            && candidate_trough <= endorsing_trough;
+
+        if reset_condition {
+            endorsing_trough = candidate_trough;
+            endorsing_peak = equity;
+            candidate_peak = equity;
         } else {
-            0.0
-        };
-
-        excess_gains[i] = excess_gain.max(0.0);
-        excess_losses[i] = excess_loss.max(0.0);
-
-        // Track maximum runup
-        if excess_loss > max_runup {
-            max_runup = excess_loss;
+            endorsing_peak = endorsing_peak.max(equity);
         }
 
-        // Mark epoch if excess gain exceeds threshold
-        if excess_gain >= tmaeg {
-            epochs[i] = true;
-            epoch_indices.push(i);
+        excess_gains[i] = excess_gain;
+        excess_losses[i] = excess_loss;
+
+        if reset_condition {
+            excess_gain = 0.0;
+            excess_loss = 0.0;
         }
+
+        // Check bear epoch condition
+        let bear_epoch_condition =
+            excess_gains[i] > excess_losses[i] && excess_gains[i] > tmaeg;
+        epochs[i] = bear_epoch_condition;
     }
 
-    // Count distinct epochs
-    let num_of_epochs = count_distinct_epochs(&epochs);
+    // Count epochs (sum of True values, matching Numba)
+    let num_of_epochs = epochs.iter().filter(|&&e| e).count();
 
-    // Calculate coefficient of variation of epoch intervals
-    let intervals_cv = calculate_intervals_cv(&epoch_indices);
+    // Calculate coefficient of variation of epoch intervals (matching Numba)
+    let intervals_cv = calculate_intervals_cv_numba_style(&epochs, num_of_epochs);
 
     BearIthResult {
         excess_gains,
@@ -222,32 +301,35 @@ pub fn bear_ith(nav: &[f64], tmaeg: f64) -> BearIthResult {
 // Helper Functions
 // ============================================================================
 
-/// Count distinct epochs (consecutive true values count as one epoch).
-fn count_distinct_epochs(epochs: &[bool]) -> usize {
-    let mut count = 0;
-    let mut in_epoch = false;
-
-    for &is_epoch in epochs {
-        if is_epoch && !in_epoch {
-            count += 1;
-            in_epoch = true;
-        } else if !is_epoch {
-            in_epoch = false;
-        }
-    }
-
-    count
-}
-
-/// Calculate coefficient of variation of epoch intervals.
-fn calculate_intervals_cv(epoch_indices: &[usize]) -> f64 {
-    if epoch_indices.len() < 2 {
+/// Calculate coefficient of variation of epoch intervals (Numba-aligned).
+///
+/// This matches the Numba implementation exactly:
+/// 1. Create epoch_indices array starting with 0
+/// 2. Append indices where epochs[i] = true
+/// 3. Calculate intervals using np.diff
+/// 4. Return std(intervals) / mean(intervals)
+fn calculate_intervals_cv_numba_style(epochs: &[bool], num_of_epochs: usize) -> f64 {
+    if num_of_epochs == 0 {
         return f64::NAN;
     }
 
-    // Calculate intervals between consecutive epochs
+    // Build epoch_indices: [0, epoch_idx1, epoch_idx2, ...]
+    // This matches the Numba code exactly
+    let mut epoch_indices = Vec::with_capacity(num_of_epochs + 1);
+    epoch_indices.push(0); // Always start with 0
+
+    for (i, &is_epoch) in epochs.iter().enumerate() {
+        if is_epoch {
+            epoch_indices.push(i);
+        }
+    }
+
+    // Calculate intervals (np.diff equivalent)
+    // epoch_indices[: num_of_epochs + 1] gives us [0, idx1, idx2, ..., idx_n]
+    // np.diff gives us [idx1-0, idx2-idx1, ..., idx_n - idx_{n-1}]
     let intervals: Vec<f64> = epoch_indices
         .windows(2)
+        .take(num_of_epochs) // Match Numba: epoch_indices[: num_of_epochs + 1]
         .map(|w| (w[1] - w[0]) as f64)
         .collect();
 
@@ -256,10 +338,11 @@ fn calculate_intervals_cv(epoch_indices: &[usize]) -> f64 {
     }
 
     let mean: f64 = intervals.iter().sum::<f64>() / intervals.len() as f64;
-    if mean.abs() < f64::EPSILON {
+    if mean <= 0.0 {
         return f64::NAN;
     }
 
+    // Calculate std (population std, matching numpy default)
     let variance: f64 = intervals.iter().map(|&x| (x - mean).powi(2)).sum::<f64>()
         / intervals.len() as f64;
 
@@ -304,6 +387,19 @@ mod tests {
         assert!(result.max_drawdown > 0.10);
     }
 
+    #[test]
+    fn test_bull_ith_state_machine() {
+        // Test the state machine resets correctly
+        // NAV goes up 6% (triggers epoch), then drops, then up again
+        let nav = vec![1.0, 1.06, 1.03, 1.09];
+        let result = bull_ith(&nav, 0.05);
+        // At index 1: +6% gain > 5% hurdle, epoch = true
+        assert!(result.epochs[1]);
+        // After reset, baseline is now 1.06, so at 1.09: gain = 1.09/1.06 - 1 ≈ 2.8%
+        // which is < 5%, so no epoch
+        assert!(!result.epochs[3]);
+    }
+
     // Bear ITH tests
     #[test]
     fn test_bear_ith_empty() {
@@ -336,36 +432,44 @@ mod tests {
         assert!(result.max_runup > 0.15);
     }
 
+    #[test]
+    fn test_bear_ith_state_machine() {
+        // Test the bear state machine resets correctly
+        // NAV drops 6% (triggers epoch), then up, then down again
+        let nav = vec![1.0, 0.94, 0.97, 0.91];
+        let result = bear_ith(&nav, 0.05);
+        // At index 1: endorsing_trough/next - 1 = 1.0/0.94 - 1 ≈ 6.4% > 5%
+        assert!(result.epochs[1]);
+    }
+
     // Helper function tests
     #[test]
-    fn test_count_distinct_epochs() {
-        let epochs = vec![false, true, true, false, true, false, false, true, true];
-        assert_eq!(count_distinct_epochs(&epochs), 3);
+    fn test_intervals_cv_numba_style() {
+        // epochs = [false, true, false, true] -> epoch_indices = [0, 1, 3]
+        // intervals = [1-0, 3-1] = [1, 2]
+        // mean = 1.5, std = 0.5, cv = 0.5/1.5 = 0.333...
+        let epochs = vec![false, true, false, true];
+        let num_epochs = 2;
+        let cv = calculate_intervals_cv_numba_style(&epochs, num_epochs);
+        assert!((cv - 0.3333).abs() < 0.01);
     }
 
     #[test]
-    fn test_count_distinct_epochs_none() {
+    fn test_intervals_cv_no_epochs() {
         let epochs = vec![false, false, false];
-        assert_eq!(count_distinct_epochs(&epochs), 0);
+        let cv = calculate_intervals_cv_numba_style(&epochs, 0);
+        assert!(cv.is_nan());
     }
 
     #[test]
-    fn test_count_distinct_epochs_all() {
-        let epochs = vec![true, true, true];
-        assert_eq!(count_distinct_epochs(&epochs), 1);
-    }
-
-    #[test]
-    fn test_intervals_cv_calculation() {
-        let indices = vec![0, 10, 20, 30];
-        let cv = calculate_intervals_cv(&indices);
-        // All intervals are 10, so CV should be 0
+    fn test_intervals_cv_equal_spacing() {
+        // epochs at indices 10, 20, 30 -> epoch_indices = [0, 10, 20, 30]
+        // intervals = [10, 10, 10], cv = 0
+        let mut epochs = vec![false; 31];
+        epochs[10] = true;
+        epochs[20] = true;
+        epochs[30] = true;
+        let cv = calculate_intervals_cv_numba_style(&epochs, 3);
         assert!((cv - 0.0).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_intervals_cv_insufficient_data() {
-        let indices = vec![5];
-        assert!(calculate_intervals_cv(&indices).is_nan());
     }
 }

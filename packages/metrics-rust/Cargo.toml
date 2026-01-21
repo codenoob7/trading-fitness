@@ -16,6 +16,7 @@ crate-type = ["cdylib", "rlib"]
 default = []
 python = ["pyo3", "numpy"]
 test-utils = []
+instrumented = ["serde_json", "chrono"]
 
 [dependencies]
 serde.workspace = true
@@ -39,3 +40,12 @@ features = ["extension-module"]
 [dependencies.numpy]
 version = "0.27"
 optional = true
+
+[dependencies.serde_json]
+version = "1.0"
+optional = true
+
+[dependencies.chrono]
+version = "0.4"
+optional = true
+features = ["serde"]
