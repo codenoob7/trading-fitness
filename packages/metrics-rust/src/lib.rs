@@ -31,6 +31,8 @@ pub mod adaptive;
 pub mod entropy;
 pub mod fractal;
 pub mod ith;
+pub mod ith_normalize;
+pub mod ith_rolling;
 pub mod nav;
 pub mod risk;
 pub mod types;
@@ -56,10 +58,16 @@ pub use risk::{
 };
 pub use types::{IthEpoch, MetricsResult};
 
+// Re-export rolling ITH features (time-agnostic, bounded [0, 1])
+pub use ith_rolling::{compute_rolling_ith, RollingIthFeatures};
+pub use ith_normalize::{
+    normalize_cv, normalize_drawdown, normalize_epochs, normalize_excess, normalize_runup,
+};
+
 // Re-export adaptive utilities
 pub use adaptive::{
     adaptive_windows, optimal_bins_freedman_diaconis, optimal_embedding_dimension,
-    optimal_sample_entropy_tolerance, relative_epsilon, AdaptiveTolerance,
+    optimal_sample_entropy_tolerance, optimal_tmaeg, relative_epsilon, AdaptiveTolerance,
     GarmanKlassNormalizer, MinimumSamples, OnlineNormalizer,
 };
 

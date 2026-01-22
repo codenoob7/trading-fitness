@@ -23,6 +23,7 @@ Metrics:
 ITH Analysis:
     - bull_ith: Long position profitability analysis
     - bear_ith: Short position profitability analysis
+    - compute_rolling_ith: Rolling window ITH features (time-agnostic, bounded [0, 1])
 
 Example:
     >>> import numpy as np
@@ -55,10 +56,14 @@ from trading_fitness_metrics._core import (
     optimal_bins_freedman_diaconis,
     optimal_embedding_dimension,
     optimal_sample_entropy_tolerance,
+    optimal_tmaeg,
     relative_epsilon,
     # ITH analysis
     bull_ith,
     bear_ith,
+    compute_rolling_ith,
+    # Classes
+    RollingIthFeatures,
     # Batch API
     compute_all_metrics,
     # Classes
@@ -88,10 +93,14 @@ __all__ = [
     "optimal_bins_freedman_diaconis",
     "optimal_embedding_dimension",
     "optimal_sample_entropy_tolerance",
+    "optimal_tmaeg",
     "relative_epsilon",
     # ITH analysis
     "bull_ith",
     "bear_ith",
+    "compute_rolling_ith",
+    # Classes
+    "RollingIthFeatures",
     # Batch API
     "compute_all_metrics",
     # Classes

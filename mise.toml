@@ -148,3 +148,25 @@ depends = ["test:metrics-rust", "test:metrics-rust:doc", "develop:metrics-rust"]
 description = "Cross-validate Numba vs Rust ITH implementations"
 depends = ["develop:metrics-rust"]
 run = "cd packages/ith-python && unset UV_PYTHON && uv run --frozen python -m ith_python.side_by_side_demo"
+
+[tasks."test:rolling-ith"]
+description = "Test rolling ITH features (Rust unit tests)"
+run = "cargo nextest run -p trading-fitness-metrics rolling"
+
+[tasks."test:ith-normalize"]
+description = "Test ITH normalization functions (Rust unit tests)"
+run = "cargo nextest run -p trading-fitness-metrics normalize"
+
+[tasks."test:rangebar-validation"]
+description = "Validate ITH features against rangebar data (requires rangebar)"
+depends = ["develop:metrics-rust"]
+run = """
+cd packages/ith-python
+unset UV_PYTHON
+uv sync --extra validation
+uv run pytest tests/test_rangebar_integration.py -v
+"""
+
+[tasks."validate:ith-features"]
+description = "Full ITH validation: unit tests + rangebar integration"
+depends = ["test:metrics-rust", "test:rolling-ith", "test:ith-normalize", "test:rangebar-validation"]

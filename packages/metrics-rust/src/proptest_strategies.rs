@@ -33,18 +33,6 @@ pub fn realistic_prices(n: usize) -> impl Strategy<Value = Vec<f64>> {
     })
 }
 
-/// Generate realistic returns (fat-tailed, bounded).
-///
-/// Properties:
-/// - Returns bounded to ±20% per step
-/// - No NaN/Inf values
-///
-/// # Arguments
-/// * `n` - Number of returns to generate
-pub fn realistic_returns(n: usize) -> impl Strategy<Value = Vec<f64>> {
-    prop::collection::vec(-0.20f64..0.20, n)
-}
-
 /// Generate valid OHLC bar with proper invariants (H ≥ O,C ≥ L).
 ///
 /// Properties:
@@ -75,25 +63,6 @@ pub fn trending_series(n: usize) -> impl Strategy<Value = Vec<f64>> {
     (1.0f64..1000.0, 1.001f64..1.02f64).prop_map(move |(start, drift)| {
         (0..n).map(|i| start * drift.powi(i as i32)).collect()
     })
-}
-
-/// Generate mean-reverting series (expected Hurst < 0.5).
-///
-/// Creates a series that oscillates around a mean.
-///
-/// # Arguments
-/// * `n` - Number of price points to generate
-pub fn mean_reverting_series(n: usize) -> impl Strategy<Value = Vec<f64>> {
-    (50.0f64..150.0, 0.5f64..5.0).prop_map(move |(mean, amplitude)| {
-        (0..n)
-            .map(|i| mean + amplitude * (i as f64 * 0.5).sin())
-            .collect()
-    })
-}
-
-/// Generate series with exactly `n` elements (for edge case testing).
-pub fn exact_length_prices(n: usize) -> impl Strategy<Value = Vec<f64>> {
-    prop::collection::vec(1.0f64..10000.0, n..=n)
 }
 
 #[cfg(test)]

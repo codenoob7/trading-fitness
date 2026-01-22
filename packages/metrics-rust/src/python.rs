@@ -361,6 +361,38 @@ fn relative_epsilon(operand: f64) -> f64 {
     crate::relative_epsilon(operand)
 }
 
+/// Compute optimal TMAEG threshold based on data volatility.
+///
+/// Uses MAD-based volatility estimation with sqrt(lookback) scaling to produce
+/// sensible ITH epoch density (typically 10-40% of bars) regardless of bar type.
+///
+/// This is automatically called by `compute_rolling_ith()`, but exposed here
+/// for inspection and debugging purposes.
+///
+/// Args:
+///     nav: NumPy array of NAV values (float64)
+///     lookback: Lookback window size for ITH computation
+///
+/// Returns:
+///     Optimal TMAEG threshold (clamped to [0.001, 0.50])
+///
+/// Example:
+///     >>> import numpy as np
+///     >>> from trading_fitness_metrics import optimal_tmaeg
+///     >>> nav = np.cumprod(1 + np.random.randn(500) * 0.01)
+///     >>> tmaeg = optimal_tmaeg(nav, lookback=100)
+///     >>> print(f"Auto-TMAEG: {tmaeg:.4f}")
+#[pyfunction]
+fn optimal_tmaeg(nav: PyReadonlyArray1<f64>, lookback: usize) -> PyResult<f64> {
+    let slice = nav
+        .as_slice()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    if slice.is_empty() {
+        return Err(PyValueError::new_err("nav array cannot be empty"));
+    }
+    Ok(crate::optimal_tmaeg(slice, lookback))
+}
+
 // ============================================================================
 // ITH Analysis
 // ============================================================================
@@ -505,6 +537,144 @@ fn bear_ith(nav: PyReadonlyArray1<f64>, tmaeg: f64) -> PyResult<PyBearIthResult>
         intervals_cv: result.intervals_cv,
         inner: result,
     })
+}
+
+// ============================================================================
+// Rolling ITH Features (Time-Agnostic, Bounded [0, 1])
+// ============================================================================
+
+/// Python wrapper for RollingIthFeatures.
+///
+/// All 8 feature arrays are bounded [0, 1] for LSTM consumption.
+/// First `lookback - 1` values are NaN (insufficient data).
+#[pyclass(name = "RollingIthFeatures")]
+#[derive(Clone)]
+pub struct PyRollingIthFeatures {
+    inner: crate::ith_rolling::RollingIthFeatures,
+}
+
+#[pymethods]
+impl PyRollingIthFeatures {
+    /// Get bull epoch density array (bounded [0, 1]).
+    #[getter]
+    fn bull_epoch_density<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+        PyArray1::from_vec(py, self.inner.bull_epoch_density.clone())
+    }
+
+    /// Get bear epoch density array (bounded [0, 1]).
+    #[getter]
+    fn bear_epoch_density<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+        PyArray1::from_vec(py, self.inner.bear_epoch_density.clone())
+    }
+
+    /// Get bull excess gain array (bounded [0, 1]).
+    #[getter]
+    fn bull_excess_gain<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+        PyArray1::from_vec(py, self.inner.bull_excess_gain.clone())
+    }
+
+    /// Get bear excess gain array (bounded [0, 1]).
+    #[getter]
+    fn bear_excess_gain<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+        PyArray1::from_vec(py, self.inner.bear_excess_gain.clone())
+    }
+
+    /// Get bull coefficient of variation array (bounded [0, 1]).
+    #[getter]
+    fn bull_cv<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+        PyArray1::from_vec(py, self.inner.bull_cv.clone())
+    }
+
+    /// Get bear coefficient of variation array (bounded [0, 1]).
+    #[getter]
+    fn bear_cv<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+        PyArray1::from_vec(py, self.inner.bear_cv.clone())
+    }
+
+    /// Get max drawdown array (bounded [0, 1]).
+    #[getter]
+    fn max_drawdown<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+        PyArray1::from_vec(py, self.inner.max_drawdown.clone())
+    }
+
+    /// Get max runup array (bounded [0, 1]).
+    #[getter]
+    fn max_runup<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+        PyArray1::from_vec(py, self.inner.max_runup.clone())
+    }
+
+    /// Get the length of the feature arrays.
+    fn __len__(&self) -> usize {
+        self.inner.bull_epoch_density.len()
+    }
+
+    fn __repr__(&self) -> String {
+        let n = self.inner.bull_epoch_density.len();
+        format!("RollingIthFeatures(len={}, features=8)", n)
+    }
+}
+
+/// Compute rolling ITH features over lookback windows.
+///
+/// This function computes Bull and Bear ITH metrics over sliding windows
+/// of the NAV series, normalizing all outputs to [0, 1] for LSTM consumption.
+///
+/// The TMAEG threshold is automatically calculated based on the data's volatility
+/// using MAD-based estimation. This ensures sensible epoch density regardless of
+/// the bar type (range bars, tick bars, time bars) or instrument volatility.
+///
+/// All 8 feature arrays are time-agnostic (bar-based, not time-based) and
+/// suitable for use with range bars, tick bars, or any bar type.
+///
+/// Args:
+///     nav: NumPy array of NAV values (float64)
+///     lookback: Number of bars to look back for each computation
+///
+/// Returns:
+///     RollingIthFeatures with 8 bounded [0, 1] feature arrays:
+///     - bull_epoch_density: Normalized bull epoch count
+///     - bear_epoch_density: Normalized bear epoch count
+///     - bull_excess_gain: Normalized sum of bull excess gains
+///     - bear_excess_gain: Normalized sum of bear excess gains
+///     - bull_cv: Normalized bull intervals coefficient of variation
+///     - bear_cv: Normalized bear intervals coefficient of variation
+///     - max_drawdown: Maximum drawdown in window
+///     - max_runup: Maximum runup in window
+///
+/// Note:
+///     First `lookback - 1` values are NaN (insufficient data for window).
+///
+/// Example:
+///     >>> import numpy as np
+///     >>> from trading_fitness_metrics import compute_rolling_ith
+///     >>> nav = np.cumprod(1 + np.random.randn(500) * 0.01)
+///     >>> features = compute_rolling_ith(nav, lookback=100)
+///     >>> features.bull_epoch_density[:99]  # First 99 are NaN
+///     >>> valid = features.bull_epoch_density[99:]  # All in [0, 1]
+#[pyfunction]
+#[pyo3(signature = (nav, lookback))]
+fn compute_rolling_ith(
+    nav: PyReadonlyArray1<f64>,
+    lookback: usize,
+) -> PyResult<PyRollingIthFeatures> {
+    let slice = nav
+        .as_slice()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+    if slice.is_empty() {
+        return Err(PyValueError::new_err("nav array cannot be empty"));
+    }
+    if lookback == 0 {
+        return Err(PyValueError::new_err("lookback must be positive"));
+    }
+    if lookback > slice.len() {
+        return Err(PyValueError::new_err(
+            "lookback cannot exceed nav array length",
+        ));
+    }
+
+    let features = crate::ith_rolling::compute_rolling_ith(slice, lookback);
+    Ok(PyRollingIthFeatures { inner: features })
 }
 
 // ============================================================================
@@ -772,11 +942,15 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(optimal_bins_freedman_diaconis, m)?)?;
     m.add_function(wrap_pyfunction!(optimal_embedding_dimension, m)?)?;
     m.add_function(wrap_pyfunction!(optimal_sample_entropy_tolerance, m)?)?;
+    m.add_function(wrap_pyfunction!(optimal_tmaeg, m)?)?;
     m.add_function(wrap_pyfunction!(relative_epsilon, m)?)?;
 
     // ITH analysis
     m.add_function(wrap_pyfunction!(bull_ith, m)?)?;
     m.add_function(wrap_pyfunction!(bear_ith, m)?)?;
+
+    // Rolling ITH features (time-agnostic, bounded [0, 1])
+    m.add_function(wrap_pyfunction!(compute_rolling_ith, m)?)?;
 
     // Batch API
     m.add_function(wrap_pyfunction!(compute_all_metrics, m)?)?;
@@ -784,6 +958,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Classes
     m.add_class::<PyBullIthResult>()?;
     m.add_class::<PyBearIthResult>()?;
+    m.add_class::<PyRollingIthFeatures>()?;
     m.add_class::<PyGarmanKlassNormalizer>()?;
     m.add_class::<PyOnlineNormalizer>()?;
     m.add_class::<PyMetricsResult>()?;

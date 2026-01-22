@@ -317,6 +317,93 @@ pub fn optimal_sample_entropy_tolerance(data: &[f64]) -> f64 {
     r.max(f64::EPSILON * 100.0)
 }
 
+/// Optimal TMAEG threshold based on data volatility (GLOBAL version).
+///
+/// **NOTE**: This function computes a GLOBAL TMAEG for the entire NAV series.
+/// For rolling window ITH computation, use `compute_rolling_ith()` which
+/// calculates TMAEG **per-window** based on each window's actual characteristics.
+/// This global function is provided for inspection/debugging purposes.
+///
+/// Uses MAD-based volatility estimation with sqrt(lookback) scaling.
+///
+/// Formula: `tmaeg = TMAEG_MULTIPLIER × MAD_std × sqrt(lookback)`
+///
+/// # Mathematical Constants
+///
+/// - `1.4826` = sqrt(2) × erfinv(0.5) - the asymptotic efficiency constant
+///   for converting MAD to standard deviation under normality assumption.
+///   This is mathematically derived, not a magic number.
+///
+/// - `TMAEG_MULTIPLIER = 3.0` - empirical multiplier for global TMAEG.
+///   This is tuned for time bars with sqrt(n) scaling. For range bars,
+///   the per-window TMAEG in `compute_rolling_ith()` uses a different
+///   empirical approach based on actual max deviation.
+///
+/// # Arguments
+/// * `nav` - NAV series (normalized price, typically starting at 1.0)
+/// * `lookback` - Lookback window size for ITH computation
+///
+/// # Returns
+/// Optimal TMAEG threshold clamped to [0.0001, 0.50]
+///
+/// # Example
+/// ```rust
+/// use trading_fitness_metrics::optimal_tmaeg;
+///
+/// let nav: Vec<f64> = (0..100).map(|i| 1.0 + (i as f64) * 0.001).collect();
+/// let tmaeg = optimal_tmaeg(&nav, 50);
+/// assert!(tmaeg > 0.0001 && tmaeg < 0.50);
+/// ```
+pub fn optimal_tmaeg(nav: &[f64], lookback: usize) -> f64 {
+    // TMAEG_MULTIPLIER: Empirical multiplier for global TMAEG calculation.
+    // This assumes sqrt(n) scaling which is appropriate for time bars
+    // but may be too conservative for range bars. The per-window TMAEG
+    // in compute_rolling_ith() uses empirical max deviation instead.
+    const TMAEG_MULTIPLIER: f64 = 3.0;
+
+    // Bounds: These are empirical guards for extreme cases.
+    // MIN_TMAEG: Supports HF forex data with tight range bars (1-5 bps).
+    // MAX_TMAEG: Theoretical max - 50% gain/loss would be extraordinary.
+    const MIN_TMAEG: f64 = 0.0001;
+    const MAX_TMAEG: f64 = 0.50;
+
+    if nav.len() < 2 {
+        return MIN_TMAEG;
+    }
+
+    // Compute returns from NAV
+    let mut returns: Vec<f64> = Vec::with_capacity(nav.len() - 1);
+    for i in 1..nav.len() {
+        if nav[i - 1] > 0.0 && nav[i - 1].is_finite() && nav[i].is_finite() {
+            let ret = (nav[i] - nav[i - 1]) / nav[i - 1];
+            if ret.is_finite() {
+                returns.push(ret);
+            }
+        }
+    }
+
+    if returns.is_empty() {
+        return MIN_TMAEG;
+    }
+
+    // Compute MAD-based standard deviation (robust to outliers)
+    let mut sorted = returns.clone();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    let median = sorted[sorted.len() / 2];
+    let mut abs_deviations: Vec<f64> = sorted.iter().map(|x| (x - median).abs()).collect();
+    abs_deviations.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mad = abs_deviations[abs_deviations.len() / 2];
+    let mad_std = 1.4826 * mad; // MAD to standard deviation conversion factor
+
+    // Scale with sqrt(lookback) for longer-horizon thresholds
+    let auto_tmaeg = TMAEG_MULTIPLIER * mad_std * (lookback as f64).sqrt();
+
+    // Clamp to reasonable bounds
+    auto_tmaeg.clamp(MIN_TMAEG, MAX_TMAEG)
+}
+
 /// Optimal bin count using Freedman-Diaconis rule.
 pub fn optimal_bins_freedman_diaconis(data: &[f64]) -> usize {
     let n = data.len();

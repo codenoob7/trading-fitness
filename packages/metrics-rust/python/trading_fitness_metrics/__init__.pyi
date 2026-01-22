@@ -277,6 +277,39 @@ def optimal_sample_entropy_tolerance(
     """
     ...
 
+def optimal_tmaeg(
+    nav: NDArray[np.float64] | Sequence[float],
+    lookback: int,
+) -> float:
+    """
+    Compute optimal TMAEG threshold based on data volatility.
+
+    Uses MAD (Median Absolute Deviation) based volatility estimation
+    with sqrt(lookback) scaling. This is the same algorithm used internally
+    by compute_rolling_ith().
+
+    Formula: tmaeg = 3.0 × MAD_std × sqrt(lookback), clamped to [0.001, 0.50]
+    where MAD_std = 1.4826 × MAD(returns)
+
+    Args:
+        nav: Array of NAV values
+        lookback: Number of bars in the lookback window
+
+    Returns:
+        Optimal TMAEG threshold, clamped to [0.0001, 0.50]
+
+    Raises:
+        ValueError: If nav has fewer than 2 elements or lookback is 0
+
+    Example:
+        >>> import numpy as np
+        >>> from trading_fitness_metrics import optimal_tmaeg
+        >>> nav = np.cumprod(1 + np.random.randn(200) * 0.01)
+        >>> tmaeg = optimal_tmaeg(nav, lookback=50)
+        >>> print(f"Auto-TMAEG: {tmaeg:.4f}")
+    """
+    ...
+
 def relative_epsilon(operand: float) -> float:
     """
     Compute relative epsilon for adaptive division guards.
@@ -388,6 +421,116 @@ def bear_ith(
 
     Raises:
         ValueError: If nav has fewer than 2 elements or tmaeg <= 0
+    """
+    ...
+
+# ============================================================================
+# Rolling ITH Features (Time-Agnostic, Bounded [0, 1])
+# ============================================================================
+
+class RollingIthFeatures:
+    """
+    Rolling ITH features - all bounded [0, 1] for LSTM consumption.
+
+    All 8 feature arrays are time-agnostic (bar-based, not time-based) and
+    suitable for use with range bars, tick bars, or any bar type.
+
+    First `lookback - 1` values are NaN (insufficient data).
+    """
+
+    @property
+    def bull_epoch_density(self) -> NDArray[np.float64]:
+        """Bull epoch density: epochs / expected_epochs, saturated to [0, 1]."""
+        ...
+
+    @property
+    def bear_epoch_density(self) -> NDArray[np.float64]:
+        """Bear epoch density: epochs / expected_epochs, saturated to [0, 1]."""
+        ...
+
+    @property
+    def bull_excess_gain(self) -> NDArray[np.float64]:
+        """Bull excess gain (sum in window): tanh-normalized to [0, 1]."""
+        ...
+
+    @property
+    def bear_excess_gain(self) -> NDArray[np.float64]:
+        """Bear excess gain (sum in window): tanh-normalized to [0, 1]."""
+        ...
+
+    @property
+    def bull_cv(self) -> NDArray[np.float64]:
+        """Bull intervals CV: sigmoid-normalized to [0, 1]."""
+        ...
+
+    @property
+    def bear_cv(self) -> NDArray[np.float64]:
+        """Bear intervals CV: sigmoid-normalized to [0, 1]."""
+        ...
+
+    @property
+    def max_drawdown(self) -> NDArray[np.float64]:
+        """Max drawdown in window: already [0, 1]."""
+        ...
+
+    @property
+    def max_runup(self) -> NDArray[np.float64]:
+        """Max runup in window: already [0, 1]."""
+        ...
+
+    def __len__(self) -> int:
+        """Get the length of the feature arrays."""
+        ...
+
+def compute_rolling_ith(
+    nav: NDArray[np.float64] | Sequence[float],
+    lookback: int,
+) -> RollingIthFeatures:
+    """
+    Compute rolling ITH features over lookback windows.
+
+    This function computes Bull and Bear ITH metrics over sliding windows
+    of the NAV series, normalizing all outputs to [0, 1] for LSTM consumption.
+
+    The TMAEG threshold is automatically calculated based on the data's volatility
+    using MAD-based estimation with sqrt(lookback) scaling. This ensures sensible
+    epoch density regardless of the bar type (range bars, tick bars, time bars)
+    or instrument volatility. See `optimal_tmaeg()` for details.
+
+    All 8 feature arrays are time-agnostic (bar-based, not time-based) and
+    suitable for use with range bars, tick bars, or any bar type.
+
+    Args:
+        nav: Array of NAV values
+        lookback: Number of bars to look back for each computation
+
+    Returns:
+        RollingIthFeatures with 8 bounded [0, 1] feature arrays:
+        - bull_epoch_density: Normalized bull epoch count
+        - bear_epoch_density: Normalized bear epoch count
+        - bull_excess_gain: Normalized sum of bull excess gains
+        - bear_excess_gain: Normalized sum of bear excess gains
+        - bull_cv: Normalized bull intervals coefficient of variation
+        - bear_cv: Normalized bear intervals coefficient of variation
+        - max_drawdown: Maximum drawdown in window
+        - max_runup: Maximum runup in window
+
+    Note:
+        First `lookback - 1` values are NaN (insufficient data for window).
+
+    Raises:
+        ValueError: If nav is empty or lookback is 0 or exceeds nav length
+
+    Example:
+        >>> import numpy as np
+        >>> from trading_fitness_metrics import compute_rolling_ith, optimal_tmaeg
+        >>> nav = np.cumprod(1 + np.random.randn(500) * 0.01)
+        >>> features = compute_rolling_ith(nav, lookback=100)
+        >>> features.bull_epoch_density[:99]  # First 99 are NaN
+        >>> valid = features.bull_epoch_density[99:]  # All in [0, 1]
+        >>>
+        >>> # To inspect the auto-calculated TMAEG:
+        >>> tmaeg = optimal_tmaeg(nav, lookback=100)
     """
     ...
 

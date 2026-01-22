@@ -63,6 +63,22 @@ ITH analysis evaluates trading strategy fitness using TMAEG (Target Maximum Acce
 
 **Deep Dive**: [docs/ITH.md](docs/ITH.md)
 
+## Terminology
+
+| Term                 | Definition                                                                                  | Unit/Range                |
+| -------------------- | ------------------------------------------------------------------------------------------- | ------------------------- |
+| **ITH**              | Investment Time Horizon - time-agnostic fitness metric counting threshold crossings         | epochs                    |
+| **TMAEG**            | Target Maximum Acceptable Excess Gain - drawdown-based hurdle for epoch counting            | decimal (e.g., 0.05 = 5%) |
+| **MCOT**             | Minimum Cost of Trade - floor value for TMAEG representing transaction costs                | dbps                      |
+| **Maximum Drawdown** | Worst decline from peak: `1 - (trough/peak)`. Adverse movement for long positions.          | [0, 1]                    |
+| **Maximum Runup**    | Worst rise from trough: `1 - (trough/current)`. Adverse movement for short positions.       | [0, 1]                    |
+| **Bull ITH**         | ITH for long positions. TMAEG = max(Max Drawdown, MCOT). Epochs count excess gains.         | epochs                    |
+| **Bear ITH**         | ITH for short positions. TMAEG = max(Max Runup, MCOT). Epochs count excess gains (inverse). | epochs                    |
+| **NAV**              | Net Asset Value - normalized price series starting at 1.0                                   | ratio                     |
+| **Epoch**            | Period where cumulative excess gain exceeds TMAEG threshold, triggering reset               | count                     |
+| **CV**               | Coefficient of Variation - `std(intervals) / mean(intervals)`. Measures epoch regularity.   | [0, ∞)                    |
+| **dbps**             | Decimal basis points. 1 dbps = 0.01% = 0.0001. Used for MCOT and thresholds.                | 1 dbps = 0.0001           |
+
 ## Documentation
 
 | Topic                                          | Location | Purpose                              |
