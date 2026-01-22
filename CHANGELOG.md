@@ -1,3 +1,15 @@
+# [2.3.0](https://github.com/terrylica/trading-fitness/compare/v2.2.0...v2.3.0) (2026-01-22)
+
+
+### Bug Fixes
+
+* **ith-python:** fix test edge cases for symmetric dogfooding validation ([7812949](https://github.com/terrylica/trading-fitness/commit/7812949c86746d3a8f894a9015b2d2ec02074692))
+
+
+### Features
+
+* **metrics-rust:** add rolling ITH features with symmetric dogfooding validation ([6467721](https://github.com/terrylica/trading-fitness/commit/64677211354743d42b44cbc224fcbe42c099485d))
+
 # [2.2.0](https://github.com/terrylica/trading-fitness/compare/v2.1.0...v2.2.0) (2026-01-21)
 
 
