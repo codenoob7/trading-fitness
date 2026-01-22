@@ -1,21 +1,25 @@
 """Shared test fixtures for ith-python tests."""
 
+import os
+import shutil
+import signal
+import subprocess
 import sys
+import tempfile
+import time
 from pathlib import Path
 from typing import NamedTuple
+
+import numpy as np
+import pandas as pd
+import pytest
+from scipy import stats
 
 # Add tests directory to sys.path for fixtures module import
 # This is required for test_bear_ith_edge_cases.py to import fixtures.edge_cases
 tests_dir = Path(__file__).parent
 if str(tests_dir) not in sys.path:
     sys.path.insert(0, str(tests_dir))
-
-import numpy as np
-import pandas as pd
-import pytest
-import tempfile
-import shutil
-from scipy import stats
 
 
 # === Bear Synthetic NAV Fixtures ===
@@ -194,3 +198,140 @@ def empty_csv_file(temp_dir: Path) -> Path:
     csv_path = temp_dir / "empty.csv"
     csv_path.touch()
     return csv_path
+
+
+# === ClickHouse Fixture for Rangebar Cache Tests ===
+
+
+def _find_clickhouse_binary() -> Path | None:
+    """Find ClickHouse binary installed via mise."""
+    mise_installs = Path.home() / ".local/share/mise/installs/clickhouse"
+    if not mise_installs.exists():
+        return None
+
+    # Prefer 'latest' symlink, then find newest version
+    latest = mise_installs / "latest/bin/clickhouse"
+    if latest.exists():
+        return latest
+
+    # Find any version
+    for version_dir in sorted(mise_installs.iterdir(), reverse=True):
+        binary = version_dir / "bin/clickhouse"
+        if binary.exists():
+            return binary
+
+    return None
+
+
+def _is_clickhouse_running() -> bool:
+    """Check if ClickHouse server is already running."""
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", "clickhouse.*server"],
+            capture_output=True,
+            timeout=5,
+            check=False,  # pgrep returns non-zero when no match - that's expected
+        )
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+
+
+def _wait_for_clickhouse(timeout: int = 30) -> bool:
+    """Wait for ClickHouse to accept connections."""
+    binary = _find_clickhouse_binary()
+    if not binary:
+        return False
+
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            result = subprocess.run(
+                [str(binary), "client", "--query", "SELECT 1"],
+                capture_output=True,
+                timeout=5,
+                check=False,  # We check returncode manually
+            )
+            if result.returncode == 0:
+                return True
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            # Server not ready yet, keep waiting
+            pass
+        time.sleep(0.5)
+    return False
+
+
+@pytest.fixture(scope="session")
+def clickhouse_server():
+    """Start ClickHouse server for the test session, stop after.
+
+    Usage:
+        @pytest.mark.usefixtures("clickhouse_server")
+        def test_with_clickhouse_cache():
+            # ClickHouse is running
+            bars = get_range_bars(..., use_cache=True)
+
+    Or request directly:
+        def test_something(clickhouse_server):
+            if clickhouse_server is None:
+                pytest.skip("ClickHouse not available")
+    """
+    binary = _find_clickhouse_binary()
+    if binary is None:
+        yield None
+        return
+
+    # Check if already running (external process)
+    if _is_clickhouse_running():
+        yield {"binary": binary, "started_by_fixture": False, "pid": None}
+        return
+
+    # Start ClickHouse server
+    data_dir = Path.home() / ".clickhouse-local"
+    data_dir.mkdir(exist_ok=True)
+
+    proc = subprocess.Popen(
+        [
+            str(binary),
+            "server",
+            "--",
+            f"--path={data_dir}",
+            "--listen_host=127.0.0.1",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,  # Don't kill with parent
+    )
+
+    # Wait for server to be ready
+    if not _wait_for_clickhouse(timeout=30):
+        proc.terminate()
+        proc.wait(timeout=5)
+        yield None
+        return
+
+    yield {"binary": binary, "started_by_fixture": True, "pid": proc.pid}
+
+    # Cleanup: stop server if we started it
+    try:
+        os.kill(proc.pid, signal.SIGTERM)
+        proc.wait(timeout=10)
+    except (ProcessLookupError, subprocess.TimeoutExpired):
+        try:
+            os.kill(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
+@pytest.fixture
+def require_clickhouse(clickhouse_server):
+    """Skip test if ClickHouse is not available.
+
+    Usage:
+        def test_cache_functionality(require_clickhouse):
+            # Test only runs if ClickHouse is available
+            ...
+    """
+    if clickhouse_server is None:
+        pytest.skip("ClickHouse not available (not installed via mise)")
+    return clickhouse_server
