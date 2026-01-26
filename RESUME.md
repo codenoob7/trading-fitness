@@ -6,6 +6,17 @@
 
 ### Completed Work
 
+**Feature Registry & ClaSPy Documentation**
+
+Created comprehensive feature tracking infrastructure:
+
+| Component                   | Status | Description                             |
+| --------------------------- | ------ | --------------------------------------- |
+| `docs/features/REGISTRY.md` | DONE   | SSoT for all extractable features       |
+| `docs/features/CLASPY.md`   | DONE   | ClaSPy integration guide (12+ features) |
+| `~/fork-tools/claspy/`      | DONE   | Forked for local exploration            |
+| Root CLAUDE.md              | DONE   | Updated with Feature Registry link      |
+
 **Observability Telemetry Enhancement (Phases 1-2)**
 
 Implemented scientific reproducibility and trading domain telemetry:
@@ -26,9 +37,21 @@ Implemented scientific reproducibility and trading domain telemetry:
 | Phase 4 | py-spy Profiling Infrastructure   | PENDING |
 | Phase 5 | Documentation Update (LOGGING.md) | PENDING |
 
+### Next Steps: ClaSPy Integration
+
+1. Add `claspy` to ith-python dependencies
+2. Create feature extractor module (`claspy_features.py`)
+3. Run statistical examination with ClaSPy features
+4. Mark redundant features as Legacy in REGISTRY.md
+5. Continue with Phase 3 hypothesis tracking
+
 ### Key Files Modified
 
 ```
+docs/features/
+├── REGISTRY.md          # NEW - Feature registry (SSoT)
+└── CLASPY.md            # NEW - ClaSPy integration guide
+
 packages/ith-python/src/ith_python/
 ├── telemetry/           # NEW - telemetry module
 │   ├── __init__.py
@@ -51,13 +74,19 @@ Full implementation plan: [docs/plans/2026-01-25-observability-telemetry-plan.md
 cd packages/ith-python
 UV_PYTHON=python3.13 uv run pytest tests/ -v --timeout=60 --ignore=tests/test_statistical_examination/
 
-# Continue with Phase 3: hypothesis tracking
-# See plan file for detailed implementation steps
+# Add ClaSPy and create feature extractor
+# Then continue with Phase 3: hypothesis tracking
 ```
 
 ---
 
 ## Previous Sessions
+
+### 2026-01-25 (earlier): Observability Telemetry Phases 1-2
+
+- Created telemetry module with provenance tracking
+- Extended ndjson_logger with scientific reproducibility fields
+- Added epoch_detected telemetry to Bull/Bear ITH
 
 ### 2026-01-23: Statistical Methods Rectification
 

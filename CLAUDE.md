@@ -81,14 +81,15 @@ ITH analysis evaluates trading strategy fitness using TMAEG (Target Maximum Acce
 
 ## Documentation
 
-| Topic                                                                       | Location    | Purpose                              |
-| --------------------------------------------------------------------------- | ----------- | ------------------------------------ |
-| [Architecture](docs/ARCHITECTURE.md)                                        | docs/       | System design, tech stack, data flow |
-| [ITH Methodology](docs/ITH.md)                                              | docs/       | Core algorithm and fitness criteria  |
-| [Logging Contract](docs/LOGGING.md)                                         | docs/       | NDJSON format, structured logging    |
-| [SR&ED Tracking](docs/SRED.md)                                              | docs/       | Tax credit evidence and claims       |
-| [Observability Plan](docs/plans/2026-01-25-observability-telemetry-plan.md) | docs/plans/ | Telemetry enhancement roadmap        |
-| [Session Resume](RESUME.md)                                                 | root        | Continue work from last session      |
+| Topic                                                                       | Location       | Purpose                              |
+| --------------------------------------------------------------------------- | -------------- | ------------------------------------ |
+| [Architecture](docs/ARCHITECTURE.md)                                        | docs/          | System design, tech stack, data flow |
+| [ITH Methodology](docs/ITH.md)                                              | docs/          | Core algorithm and fitness criteria  |
+| [Feature Registry](docs/features/REGISTRY.md)                               | docs/features/ | All extractable features (SSoT)      |
+| [Logging Contract](docs/LOGGING.md)                                         | docs/          | NDJSON format, structured logging    |
+| [SR&ED Tracking](docs/SRED.md)                                              | docs/          | Tax credit evidence and claims       |
+| [Observability Plan](docs/plans/2026-01-25-observability-telemetry-plan.md) | docs/plans/    | Telemetry enhancement roadmap        |
+| [Session Resume](RESUME.md)                                                 | root           | Continue work from last session      |
 
 ## MCP Servers
 
