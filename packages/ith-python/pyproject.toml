@@ -30,6 +30,8 @@ examination = [
     "lightgbm>=4.6.0",  # Required by SHAP TreeExplainer
     # Validation (Polars-native)
     "pandera[polars]>=0.23.1",
+    # Time series segmentation for regime detection
+    "claspy>=0.1.3.1",
 ]
 
 [dependency-groups]
@@ -52,3 +54,4 @@ packages = ["src/ith_python"]
 [tool.uv.sources]
 rangebar = { git = "https://github.com/terrylica/rangebar-py", branch = "main" }
 trading-fitness-metrics = { path = "../metrics-rust" }
+claspy = { path = "../../../../fork-tools/claspy" }
