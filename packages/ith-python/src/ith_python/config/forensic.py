@@ -8,15 +8,12 @@ Reference: docs/plans/2026-01-25-multi-view-feature-architecture-plan.md
 
 from __future__ import annotations
 
+import os
 import sys
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
 
 
 @dataclass
@@ -132,6 +129,33 @@ class ForensicConfig:
         return len(self.symbols) * len(self.thresholds)
 
 
+def find_project_root() -> Path:
+    """Find the trading-fitness project root directory.
+
+    Detection strategy (in order):
+    1. TRADING_FITNESS_ROOT environment variable (set by mise)
+    2. Look for Cargo.toml (monorepo root marker)
+    3. Fall back to cwd
+
+    Returns:
+        Path to project root directory.
+    """
+    # Strategy 1: Environment variable (set by mise)
+    env_root = os.environ.get("TRADING_FITNESS_ROOT")
+    if env_root:
+        return Path(env_root)
+
+    # Strategy 2: Walk up looking for Cargo.toml (unique to monorepo root)
+    current = Path.cwd()
+    while current != current.parent:
+        if (current / "Cargo.toml").exists() and (current / "config").is_dir():
+            return current
+        current = current.parent
+
+    # Strategy 3: Fall back to cwd
+    return Path.cwd()
+
+
 def load_forensic_config(config_path: Path | str | None = None) -> ForensicConfig:
     """Load forensic configuration from TOML file.
 
@@ -147,15 +171,8 @@ def load_forensic_config(config_path: Path | str | None = None) -> ForensicConfi
         ValueError: If config validation fails.
     """
     if config_path is None:
-        # Find project root (look for mise.toml)
-        current = Path.cwd()
-        while current != current.parent:
-            if (current / "mise.toml").exists():
-                config_path = current / "config" / "forensic.toml"
-                break
-            current = current.parent
-        else:
-            config_path = Path("config/forensic.toml")
+        project_root = find_project_root()
+        config_path = project_root / "config" / "forensic.toml"
 
     config_path = Path(config_path)
     if not config_path.exists():

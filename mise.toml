@@ -8,6 +8,7 @@ GITHUB_TOKEN = "{{ read_file(path=env.HOME ~ '/.claude/.secrets/gh-token-terryli
 LOG_DIR = "{{config_root}}/logs"
 ENV = "dev"
 UV_PYTHON = "python3.13"  # Force Python 3.13 for all uv tasks
+TRADING_FITNESS_ROOT = "{{config_root}}"  # Project root for config resolution
 
 [tools]
 python = "3.13"    # SSoT-OK: mise manages runtime versions
@@ -469,7 +470,7 @@ LOOKBACKS = [20, 50, 100, 200, 500]
 END_DATE = '2026-01-20'  # Use date with known data availability
 
 LOG_DIR = Path('$LOG_DIR')
-ARTIFACT_DIR = Path('$ARTIFACT_DIR')
+ARTIFACT_DIR = Path('../../artifacts/ssot')
 
 logger = setup_ndjson_logger('forensic_e2e')
 trace_id = get_trace_id()
@@ -835,9 +836,10 @@ TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 ARTIFACT_DIR="../../artifacts/ssot"
 mkdir -p "$ARTIFACT_DIR"
 
-echo "🔧 Computing ITH features..."
-uv run python -c "
+echo "Computing ITH features..."
+uv run python << 'PYTHON_EOF'
 import sys
+import re
 from pathlib import Path
 import numpy as np
 import polars as pl
@@ -848,16 +850,20 @@ from ith_python.features import compute_features, FeatureConfig
 from ith_python.storage import FeatureStore
 from ith_python.storage.schemas import FEATURE_SHORT_NAMES
 from ith_python.telemetry.provenance import fingerprint_array
+from ith_python.config import load_forensic_config
 
-# Configuration
-SYMBOLS = ['BTCUSDT', 'ETHUSDT']
-N_BARS = 2000
-THRESHOLDS = [25, 50, 100, 250]
-LOOKBACKS = [20, 50, 100, 200, 500]
+# Load configuration from config/forensic.toml (SSoT)
+config = load_forensic_config()
+SYMBOLS = config.symbols
+N_BARS = 2000  # Fixed for now, could add to config
+THRESHOLDS = config.thresholds
+LOOKBACKS = config.lookbacks
 END_DATE = '2026-01-20'
 
-ARTIFACT_DIR = Path('$ARTIFACT_DIR')
+ARTIFACT_DIR = Path(config.output.ssot_dir)
+ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 
+print(f'Configuration loaded from config/forensic.toml')
 print(f'Computing features for {SYMBOLS}')
 print(f'Thresholds: {THRESHOLDS}, Lookbacks: {LOOKBACKS}')
 
@@ -889,12 +895,11 @@ for symbol in SYMBOLS:
     # Compute features for each threshold
     for threshold in THRESHOLDS:
         print(f'    Computing features for threshold={threshold}...')
-        config = FeatureConfig(lookbacks=LOOKBACKS, threshold_dbps=threshold)
-        wide_df = compute_features(nav, config, emit_telemetry=True)
+        feature_config = FeatureConfig(lookbacks=LOOKBACKS, threshold_dbps=threshold)
+        wide_df = compute_features(nav, feature_config, emit_telemetry=config.telemetry.enabled)
 
         # Convert to long format
         feature_cols = [c for c in wide_df.columns if c.startswith('ith_')]
-        import re
         for col in feature_cols:
             match = re.match(r'ith_rb(\\d+)_lb(\\d+)_(.+)', col)
             if not match:
@@ -937,11 +942,8 @@ df = df.with_columns([
 # Save SSoT
 output_path = ARTIFACT_DIR / 'features_long.parquet'
 df.write_parquet(output_path)
-print(f'✅ Saved {len(df):,} rows to {output_path}')
-print(f'   Symbols: {df[\"symbol\"].unique().to_list()}')
-print(f'   Thresholds: {sorted(df[\"threshold_dbps\"].unique().to_list())}')
-print(f'   Lookbacks: {sorted(df[\"lookback\"].unique().to_list())}')
-"
+print(f'Saved {len(df):,} rows to {output_path}')
+PYTHON_EOF
 """
 
 # ============ Layer 2: View Generation ============
@@ -961,7 +963,7 @@ from pathlib import Path
 from ith_python.storage import FeatureStore
 
 SSOT_PATH = Path('../../artifacts/ssot/features_long.parquet')
-ARTIFACT_DIR = Path('$ARTIFACT_DIR')
+ARTIFACT_DIR = Path('../../artifacts/ssot')
 
 if not SSOT_PATH.exists():
     print(f'ERROR: SSoT not found at {SSOT_PATH}')
@@ -992,14 +994,15 @@ uv sync --extra examination
 ARTIFACT_DIR="../../artifacts/views/nested"
 mkdir -p "$ARTIFACT_DIR"
 
-echo "📊 Generating nested JSON views..."
-uv run python -c "
+echo "Generating nested JSON views..."
+uv run python << 'PYTHON_EOF'
 import json
 from pathlib import Path
 from ith_python.storage import FeatureStore
 
 SSOT_PATH = Path('../../artifacts/ssot/features_long.parquet')
-ARTIFACT_DIR = Path('$ARTIFACT_DIR')
+ARTIFACT_DIR = Path('../../artifacts/views/nested')
+ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 
 if not SSOT_PATH.exists():
     print(f'ERROR: SSoT not found at {SSOT_PATH}')
@@ -1015,12 +1018,13 @@ nested = sample_store.to_nested()
 
 # Save as JSONL (one record per line)
 output_path = ARTIFACT_DIR / 'features.jsonl'
+newline = chr(10)
 with open(output_path, 'w') as f:
     for record in nested[:1000]:  # Sample first 1000 for speed
-        f.write(json.dumps(record, default=str) + '\n')
+        f.write(json.dumps(record, default=str) + newline)
 
-print(f'✅ Saved {min(len(nested), 1000)} records to {output_path}')
-"
+print(f'Saved {min(len(nested), 1000)} records to {output_path}')
+PYTHON_EOF
 """
 
 [tasks."views:all"]
@@ -1047,7 +1051,7 @@ from ith_python.storage import FeatureStore
 from ith_python.statistical_examination.distribution import analyze_all_distributions
 
 SSOT_PATH = Path('../../artifacts/ssot/features_long.parquet')
-ARTIFACT_DIR = Path('$ARTIFACT_DIR')
+ARTIFACT_DIR = Path('../../artifacts/ssot')
 
 store = FeatureStore.from_parquet(SSOT_PATH)
 wide_df = store.to_wide(drop_warmup=True)
@@ -1084,7 +1088,7 @@ from ith_python.storage import FeatureStore
 from ith_python.statistical_examination.dimensionality import perform_pca, compute_vif
 
 SSOT_PATH = Path('../../artifacts/ssot/features_long.parquet')
-ARTIFACT_DIR = Path('$ARTIFACT_DIR')
+ARTIFACT_DIR = Path('../../artifacts/ssot')
 
 store = FeatureStore.from_parquet(SSOT_PATH)
 wide_df = store.to_wide(drop_warmup=True)
@@ -1157,17 +1161,18 @@ echo "🔧 Loading forensic configuration..."
 uv run python -m ith_python.config.forensic --validate
 
 # Export key values for downstream tasks
-uv run python -c "
+uv run python << 'PYTHON_EOF'
 from ith_python.config import load_forensic_config
 config = load_forensic_config()
-print(f'FORENSIC_SYMBOLS={",".join(config.symbols)}')
-print(f'FORENSIC_THRESHOLDS={",".join(map(str, config.thresholds))}')
-print(f'FORENSIC_LOOKBACKS={",".join(map(str, config.lookbacks))}')
-print(f'FORENSIC_MIN_VALID_BARS={config.preflight.min_valid_bars}')
-print(f'FORENSIC_WARMUP_BARS={config.warmup_bars}')
-print(f'FORENSIC_AUTO_FETCH={str(config.preflight.auto_fetch).lower()}')
-print(f'FORENSIC_VALIDATION_PRESET={config.validation.preset}')
-"
+sep = ","
+print(f"FORENSIC_SYMBOLS={sep.join(config.symbols)}")
+print(f"FORENSIC_THRESHOLDS={sep.join(map(str, config.thresholds))}")
+print(f"FORENSIC_LOOKBACKS={sep.join(map(str, config.lookbacks))}")
+print(f"FORENSIC_MIN_VALID_BARS={config.preflight.min_valid_bars}")
+print(f"FORENSIC_WARMUP_BARS={config.warmup_bars}")
+print(f"FORENSIC_AUTO_FETCH={str(config.preflight.auto_fetch).lower()}")
+print(f"FORENSIC_VALIDATION_PRESET={config.validation.preset}")
+PYTHON_EOF
 """
 
 # ============ Preflight: ClickHouse ============
@@ -1230,7 +1235,7 @@ run = """
 cd packages/ith-python
 uv sync --extra validation
 
-echo "🔍 Checking range bar cache status..."
+echo "Checking range bar cache status..."
 uv run python << 'PYTHON_EOF'
 import sys
 from ith_python.config import load_forensic_config
@@ -1238,7 +1243,7 @@ from ith_python.config import load_forensic_config
 try:
     from rangebar import RangeBarCache
 except ImportError:
-    print("❌ rangebar package not installed")
+    print("ERROR: rangebar package not installed")
     sys.exit(1)
 
 config = load_forensic_config()
@@ -1258,13 +1263,13 @@ for symbol in config.symbols:
 
         if count == 0:
             missing.append((symbol, threshold))
-            print(f"  ❌ {symbol} @ {threshold}dbps: NO DATA")
+            print(f"  MISSING: {symbol} @ {threshold}dbps: NO DATA")
         else:
             from datetime import datetime
             oldest_dt = datetime.fromtimestamp(oldest / 1000) if oldest else None
             newest_dt = datetime.fromtimestamp(newest / 1000) if newest else None
             available.append((symbol, threshold, count, oldest_dt, newest_dt))
-            print(f"  ✅ {symbol} @ {threshold}dbps: {count:,} bars ({oldest_dt:%Y-%m-%d} to {newest_dt:%Y-%m-%d})")
+            print(f"  OK: {symbol} @ {threshold}dbps: {count:,} bars ({oldest_dt:%Y-%m-%d} to {newest_dt:%Y-%m-%d})")
 
 print()
 print(f"Available: {len(available)} / {config.total_combinations}")
@@ -1272,19 +1277,20 @@ print(f"Missing: {len(missing)} / {config.total_combinations}")
 
 if missing and config.preflight.auto_fetch:
     print()
-    print("⚠️  Missing data will be fetched by data:precompute task")
+    print("WARN: Missing data will be fetched by data:precompute task")
     # Write missing combinations for downstream task
     with open("../../.missing_data.txt", "w") as f:
         for symbol, threshold in missing:
-            f.write(f"{symbol},{threshold}\n")
+            line = f"{symbol},{threshold}"
+            f.write(line + chr(10))
 elif missing:
     print()
-    print("❌ Missing data and auto_fetch=false")
+    print("ERROR: Missing data and auto_fetch=false")
     print("   Run: mise run data:precompute")
     sys.exit(1)
 else:
     print()
-    print("✅ All required data available in cache")
+    print("All required data available in cache")
 PYTHON_EOF
 """
 
@@ -1296,7 +1302,7 @@ run = """
 cd packages/ith-python
 uv sync --extra validation
 
-echo "📥 Precomputing range bar data..."
+echo "Precomputing range bar data..."
 uv run python << 'PYTHON_EOF'
 import sys
 from pathlib import Path
@@ -1306,7 +1312,7 @@ from ith_python.config import load_forensic_config
 try:
     from rangebar import precompute_range_bars, PrecomputeProgress, RangeBarCache
 except ImportError:
-    print("❌ rangebar package not installed")
+    print("ERROR: rangebar package not installed")
     sys.exit(1)
 
 config = load_forensic_config()
@@ -1326,7 +1332,7 @@ else:
     missing = config.symbol_threshold_matrix
 
 if not missing:
-    print("✅ No missing data to precompute")
+    print("No missing data to precompute")
     sys.exit(0)
 
 print(f"Precomputing {len(missing)} symbol x threshold combinations...")
@@ -1344,7 +1350,7 @@ elif config.date_range.strategy == "fixed":
     start_date = config.date_range.start_date
     end_date = config.date_range.end_date
 else:
-    print(f"❌ Unsupported date strategy: {config.date_range.strategy}")
+    print(f"ERROR: Unsupported date strategy: {config.date_range.strategy}")
     sys.exit(1)
 
 print(f"Date range: {start_date} to {end_date}")
@@ -1358,7 +1364,7 @@ success = 0
 failed = 0
 
 for symbol, threshold in missing:
-    print(f"📊 {symbol} @ {threshold}dbps...")
+    print(f"Processing {symbol} @ {threshold}dbps...")
     try:
         result = precompute_range_bars(
             symbol=symbol,
@@ -1371,10 +1377,10 @@ for symbol, threshold in missing:
             validate_on_complete=config.validation.on_failure,
             continuity_tolerance_pct=config.validation.effective_tolerance,
         )
-        print(f"  ✅ {result.total_bars:,} bars in {result.elapsed_seconds:.1f}s")
+        print(f"  OK: {result.total_bars:,} bars in {result.elapsed_seconds:.1f}s")
         success += 1
     except Exception as e:
-        print(f"  ❌ Failed: {e}")
+        print(f"  FAIL: {e}")
         failed += 1
 
 print()
@@ -1393,7 +1399,7 @@ run = """
 cd packages/ith-python
 uv sync --extra validation
 
-echo "🔬 Validating range bar continuity..."
+echo "Validating range bar continuity..."
 uv run python << 'PYTHON_EOF'
 import sys
 from ith_python.config import load_forensic_config
@@ -1401,7 +1407,7 @@ from ith_python.config import load_forensic_config
 try:
     from rangebar import RangeBarCache, validate_continuity_tiered
 except ImportError:
-    print("❌ rangebar package not installed")
+    print("ERROR: rangebar package not installed")
     sys.exit(1)
 
 config = load_forensic_config()
@@ -1423,7 +1429,7 @@ for symbol in config.symbols:
         )
 
         if df is None or len(df) < 100:
-            print(f"  ⚠️  {symbol} @ {threshold}dbps: Insufficient data ({count} bars)")
+            print(f"  WARN: {symbol} @ {threshold}dbps: Insufficient data ({count} bars)")
             continue
 
         # Run tiered validation
@@ -1437,11 +1443,11 @@ for symbol in config.symbols:
         results.append((symbol, threshold, result))
 
         if result.is_valid:
-            print(f"  ✅ {symbol} @ {threshold}dbps: {len(df):,} bars, valid")
+            print(f"  OK: {symbol} @ {threshold}dbps: {len(df):,} bars, valid")
         else:
             all_valid = False
             gaps = result.summary_dict()
-            print(f"  ❌ {symbol} @ {threshold}dbps: {len(df):,} bars, GAPS: {gaps}")
+            print(f"  FAIL: {symbol} @ {threshold}dbps: {len(df):,} bars, GAPS: {gaps}")
 
 print()
 print("=" * 60)
@@ -1460,13 +1466,13 @@ for tier, count in sorted(tier_counts.items()):
     print(f"  {tier}: {count}")
 
 if all_valid:
-    print("\n✅ All data passes continuity validation")
+    print("\nAll data passes continuity validation")
 else:
     if config.validation.on_failure == "error":
-        print("\n❌ Validation failed (on_failure=error)")
+        print("\nERROR: Validation failed (on_failure=error)")
         sys.exit(1)
     else:
-        print(f"\n⚠️  Validation issues detected (on_failure={config.validation.on_failure})")
+        print(f"\nWARN: Validation issues detected (on_failure={config.validation.on_failure})")
 PYTHON_EOF
 """
 
