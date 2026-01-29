@@ -1,3 +1,5 @@
+## [3.0.1](https://github.com/terrylica/trading-fitness/compare/v3.0.0...v3.0.1) (2026-01-29)
+
 # [3.0.0](https://github.com/terrylica/trading-fitness/compare/v2.6.0...v3.0.0) (2026-01-27)
 
 
